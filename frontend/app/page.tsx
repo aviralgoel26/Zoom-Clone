@@ -35,6 +35,7 @@ import {
   getRecentMeetings,
   Meeting,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,6 +70,7 @@ function useLiveClock() {
 export default function DashboardPage() {
   const router = useRouter();
   const now = useLiveClock();
+  const { user } = useAuth();
 
   // Meeting state
   const [upcomingMeetings, setUpcomingMeetings] = useState<Meeting[]>([]);
@@ -86,11 +88,18 @@ export default function DashboardPage() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinModal, setJoinModal] = useState<JoinModalState>({
     meetingId: "",
-    displayName: "Aviral Goel",
+    displayName: "Guest",
     rememberName: true,
     noAudio: false,
     noVideo: false,
   });
+
+  // Sync displayName when user logs in or logs out
+  useEffect(() => {
+    if (user?.display_name) {
+      setJoinModal((prev) => ({ ...prev, displayName: user.display_name }));
+    }
+  }, [user]);
 
   // Fetch meetings on mount
   useEffect(() => {

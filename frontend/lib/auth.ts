@@ -1,12 +1,14 @@
 /**
  * auth.ts
  * -------
- * Frontend authentication API client and session helpers.
+ * Frontend authentication API client, session helpers, and custom useAuth hook.
  *
  * Session stored in localStorage:
  *   zoom_clone_token  — JWT string
  *   zoom_clone_user   — JSON-serialised { id, display_name, email }
  */
+
+import { useState, useEffect, useCallback } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -22,20 +24,28 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
-// ---------------------------------------------------------------------------
-// Session helpers
-// ---------------------------------------------------------------------------
 const TOKEN_KEY = "zoom_clone_token";
 const USER_KEY  = "zoom_clone_user";
+
+// ---------------------------------------------------------------------------
+// Event dispatcher for reactive auth state across components
+// ---------------------------------------------------------------------------
+function notifyAuthChange() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("zoom_auth_change"));
+  }
+}
 
 export function saveSession(token: string, user: AuthUser): void {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  notifyAuthChange();
 }
 
 export function clearSession(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  notifyAuthChange();
 }
 
 export function getStoredToken(): string | null {
@@ -95,4 +105,40 @@ export async function getMe(token: string): Promise<AuthUser> {
   });
   if (!res.ok) throw new Error("Token invalid or expired");
   return (await res.json()) as AuthUser;
+}
+
+// ---------------------------------------------------------------------------
+// React Hook for Auth State Syncing
+// ---------------------------------------------------------------------------
+export function useAuth() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const syncUser = useCallback(async () => {
+    const storedUser = getStoredUser();
+    const token = getStoredToken();
+    if (storedUser && token) {
+      setUser(storedUser);
+      try {
+        const freshUser = await getMe(token);
+        setUser(freshUser);
+        localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
+      } catch {
+        clearSession();
+        setUser(null);
+      }
+    } else {
+      setUser(null);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    syncUser();
+    const handleEvent = () => syncUser();
+    window.addEventListener("zoom_auth_change", handleEvent);
+    return () => window.removeEventListener("zoom_auth_change", handleEvent);
+  }, [syncUser]);
+
+  return { user, loading, syncUser };
 }

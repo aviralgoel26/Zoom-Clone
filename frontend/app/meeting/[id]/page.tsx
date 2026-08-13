@@ -48,6 +48,7 @@ import {
   endMeeting,
   MeetingValidationResponse,
 } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 
 export default function MeetingPage() {
   const params = useParams();
@@ -81,7 +82,9 @@ export default function MeetingPage() {
   // ---------------------------------------------------------------------------
   // Lobby state
   // ---------------------------------------------------------------------------
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useState(() => {
+    return getStoredUser()?.display_name || "";
+  });
   /**
    * Role is read-only after derivation — no setter exposed.
    * isHostFromQuery is true only when ?host=true is in the URL.

@@ -4,14 +4,10 @@
  * DashboardHeader.tsx
  * --------------------
  * Top navigation bar — Zoom Workplace style.
- * Auth is now fully wired to the backend JWT service.
- *
- * On mount → reads stored token → calls GET /api/auth/me to validate session.
- * Sign In / Sign Up → calls backend, stores JWT + user in localStorage.
- * Sign Out → clears localStorage session.
+ * Auth is fully integrated via `useAuth` hook for real-time state synchronization.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   Search,
   Bell,
@@ -32,23 +28,16 @@ import {
 import {
   login,
   register,
-  getMe,
-  getStoredToken,
-  getStoredUser,
   saveSession,
   clearSession,
-  type AuthUser,
+  useAuth,
 } from "@/lib/auth";
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 export default function DashboardHeader() {
+  const { user: currentUser, loading: isLoadingAuth } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
-  // Modal & form state
+  // Modal & dropdown state
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
@@ -63,36 +52,6 @@ export default function DashboardHeader() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
-  // ---------------------------------------------------------------------------
-  // On mount — rehydrate session from localStorage
-  // ---------------------------------------------------------------------------
-  const rehydrateSession = useCallback(async () => {
-    setIsLoadingAuth(true);
-    try {
-      const stored = getStoredUser();
-      const token  = getStoredToken();
-      if (stored && token) {
-        // Optimistically set from localStorage, then validate with backend
-        setCurrentUser(stored);
-        const fresh = await getMe(token);
-        setCurrentUser(fresh);
-      }
-    } catch {
-      // Token expired or invalid — clear it
-      clearSession();
-      setCurrentUser(null);
-    } finally {
-      setIsLoadingAuth(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    rehydrateSession();
-  }, [rehydrateSession]);
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
   const initials = currentUser
     ? currentUser.display_name
         .split(" ")
@@ -119,13 +78,9 @@ export default function DashboardHeader() {
 
   const handleSignOut = () => {
     clearSession();
-    setCurrentUser(null);
     setShowProfileMenu(false);
   };
 
-  // ---------------------------------------------------------------------------
-  // Auth form submit
-  // ---------------------------------------------------------------------------
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
@@ -141,10 +96,13 @@ export default function DashboardHeader() {
           setAuthLoading(false);
           return;
         }
-        response = await register(displayNameInput.trim(), emailInput.trim(), passwordInput);
+        response = await register(
+          displayNameInput.trim(),
+          emailInput.trim(),
+          passwordInput
+        );
       }
       saveSession(response.access_token, response.user);
-      setCurrentUser(response.user);
       closeModal();
     } catch (err: unknown) {
       setAuthError(err instanceof Error ? err.message : "Something went wrong");
@@ -153,9 +111,6 @@ export default function DashboardHeader() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   return (
     <>
       <header
@@ -171,26 +126,33 @@ export default function DashboardHeader() {
 
         {/* ── Center Navigation & Search ────────────────────── */}
         <div className="flex items-center gap-3 flex-1 max-w-xl mx-8 justify-center">
-          {/* Nav arrows */}
           <div className="flex items-center gap-1 flex-shrink-0 text-[#6E7683]">
-            <button id="header-nav-back" aria-label="Go back"
+            <button
+              id="header-nav-back"
+              aria-label="Go back"
               onClick={() => window.history.back()}
-              className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors">
+              className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors"
+            >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button id="header-nav-forward" aria-label="Go forward"
+            <button
+              id="header-nav-forward"
+              aria-label="Go forward"
               onClick={() => window.history.forward()}
-              className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors">
+              className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors"
+            >
               <ChevronRight className="w-4 h-4" />
             </button>
-            <button id="header-nav-history" aria-label="Reload"
+            <button
+              id="header-nav-history"
+              aria-label="Reload"
               onClick={() => window.location.reload()}
-              className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors">
+              className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors"
+            >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Search pill */}
           <div className="flex items-center w-full max-w-md bg-[#EBECEF] rounded-full px-3.5 py-1.5 gap-2.5 border border-transparent focus-within:border-[#0E71EB] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0E71EB]/20 transition-all">
             <Search className="w-4 h-4 text-[#6E7683] flex-shrink-0" />
             <input
@@ -203,29 +165,40 @@ export default function DashboardHeader() {
             />
           </div>
 
-          <button id="header-add-btn" aria-label="Create new"
-            className="p-1.5 rounded-lg hover:bg-[#F4F5F7] text-[#6E7683] hover:text-[#131619] transition-colors flex-shrink-0">
+          <button
+            id="header-add-btn"
+            aria-label="Create new"
+            className="p-1.5 rounded-lg hover:bg-[#F4F5F7] text-[#6E7683] hover:text-[#131619] transition-colors flex-shrink-0"
+          >
             <Plus className="w-4 h-4" />
           </button>
         </div>
 
         {/* ── Right Corner: Actions & Profile/Auth ──────────── */}
         <div className="flex items-center gap-3.5 flex-shrink-0">
-          <button id="header-upgrade-btn"
-            className="bg-[#0E71EB] hover:bg-[#0B5EC4] text-white rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer">
+          <button
+            id="header-upgrade-btn"
+            className="bg-[#0E71EB] hover:bg-[#0B5EC4] text-white rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs hover:shadow-sm"
+          >
             Upgrade
           </button>
-          <button id="header-notifications" aria-label="Notifications"
-            className="relative p-2 rounded-full hover:bg-[#F4F5F7] text-[#6E7683] transition-colors cursor-pointer">
+          <button
+            id="header-notifications"
+            aria-label="Notifications"
+            className="relative p-2 rounded-full hover:bg-[#F4F5F7] text-[#6E7683] transition-colors cursor-pointer"
+          >
             <Bell className="w-4 h-4" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#FF3B30] border-2 border-white" />
           </button>
-          <button id="header-calendar" aria-label="Calendar"
-            className="relative p-2 rounded-full hover:bg-[#F4F5F7] text-[#6E7683] transition-colors cursor-pointer">
+          <button
+            id="header-calendar"
+            aria-label="Calendar"
+            className="relative p-2 rounded-full hover:bg-[#F4F5F7] text-[#6E7683] transition-colors cursor-pointer"
+          >
             <Calendar className="w-4 h-4" />
           </button>
 
-          {/* ── Profile or Sign In/Up ─────────────────────── */}
+          {/* Profile or Sign In/Up */}
           {isLoadingAuth ? (
             <div className="w-8 h-8 rounded-full bg-[#EBECEF] animate-pulse" />
           ) : currentUser ? (
@@ -237,7 +210,7 @@ export default function DashboardHeader() {
                 title={`${currentUser.display_name} (${currentUser.email})`}
                 aria-label="User Profile"
               >
-                <div className="w-8 h-8 rounded-full bg-[#0E71EB] flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                <div className="w-8 h-8 rounded-full bg-[#0E71EB] flex items-center justify-center text-white text-xs font-bold shadow-xs">
                   {initials}
                 </div>
                 <span className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-[#34C759] border-2 border-white" />
@@ -290,7 +263,7 @@ export default function DashboardHeader() {
               <button
                 id="header-signup-btn"
                 onClick={() => openModal("signup")}
-                className="px-4 py-1.5 bg-[#0E71EB] hover:bg-[#0B5EC4] text-white text-xs font-semibold rounded-full transition-all cursor-pointer"
+                className="px-4 py-1.5 bg-[#0E71EB] hover:bg-[#0B5EC4] text-white text-xs font-semibold rounded-full transition-all cursor-pointer shadow-xs hover:shadow-sm"
               >
                 Sign Up Free
               </button>
@@ -299,11 +272,13 @@ export default function DashboardHeader() {
         </div>
       </header>
 
-      {/* ── Auth Modal ─────────────────────────────────────── */}
+      {/* ── Auth Modal (Sign In / Sign Up) ───────────────────── */}
       {showAuthModal && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-          onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-xs"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeModal();
+          }}
         >
           <div className="w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
@@ -314,17 +289,17 @@ export default function DashboardHeader() {
                   {authMode === "signin" ? "Sign In" : "Sign Up Free"}
                 </span>
               </div>
-              <button onClick={closeModal}
+              <button
+                onClick={closeModal}
                 className="p-1.5 rounded-lg hover:bg-[#F4F5F7] text-[#6E7683] transition-colors"
-                aria-label="Close">
+                aria-label="Close"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Body */}
+            {/* Modal Form */}
             <form onSubmit={handleAuthSubmit} className="px-6 py-5 space-y-4">
-
-              {/* Display Name — Sign Up only */}
               {authMode === "signup" && (
                 <div>
                   <label className="block text-xs font-medium text-[#6E7683] mb-1.5">
@@ -346,7 +321,6 @@ export default function DashboardHeader() {
                 </div>
               )}
 
-              {/* Email */}
               <div>
                 <label className="block text-xs font-medium text-[#6E7683] mb-1.5">
                   Email Address
@@ -366,7 +340,6 @@ export default function DashboardHeader() {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label className="block text-xs font-medium text-[#6E7683] mb-1.5">
                   Password
@@ -394,14 +367,12 @@ export default function DashboardHeader() {
                 </div>
               </div>
 
-              {/* Error message */}
               {authError && (
                 <div className="bg-[#FFF0F0] border border-[#FFD0D0] text-[#CC0000] text-xs rounded-xl px-3 py-2.5 font-medium">
                   {authError}
                 </div>
               )}
 
-              {/* Submit */}
               <button
                 id="auth-submit-btn"
                 type="submit"
@@ -413,25 +384,38 @@ export default function DashboardHeader() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                ) : authMode === "signin" ? "Sign In" : "Create Account"}
+                ) : authMode === "signin" ? (
+                  "Sign In"
+                ) : (
+                  "Create Account"
+                )}
               </button>
             </form>
 
-            {/* Toggle between Sign In / Sign Up */}
             <div className="text-center pb-5 px-6">
               {authMode === "signin" ? (
                 <p className="text-xs text-[#6E7683]">
                   Don&apos;t have an account?{" "}
-                  <button onClick={() => { setAuthMode("signup"); setAuthError(""); }}
-                    className="text-[#0E71EB] font-semibold hover:underline cursor-pointer">
+                  <button
+                    onClick={() => {
+                      setAuthMode("signup");
+                      setAuthError("");
+                    }}
+                    className="text-[#0E71EB] font-semibold hover:underline cursor-pointer"
+                  >
                     Sign Up Free
                   </button>
                 </p>
               ) : (
                 <p className="text-xs text-[#6E7683]">
                   Already have an account?{" "}
-                  <button onClick={() => { setAuthMode("signin"); setAuthError(""); }}
-                    className="text-[#0E71EB] font-semibold hover:underline cursor-pointer">
+                  <button
+                    onClick={() => {
+                      setAuthMode("signin");
+                      setAuthError("");
+                    }}
+                    className="text-[#0E71EB] font-semibold hover:underline cursor-pointer"
+                  >
                     Sign In
                   </button>
                 </p>
