@@ -18,22 +18,12 @@
  *  - Name label at the bottom
  *  - Muted microphone icon overlay
  *  - "HOST" badge on the host's tile
- *
- * CAMERA TOGGLE BUG FIX (Point 3):
- *  The <video> element is conditionally rendered — it unmounts when
- *  isVideoOff=true and remounts when isVideoOff=false. Because the stream
- *  reference itself doesn't change during a toggle, the useEffect([stream])
- *  would NOT re-fire on remount, leaving srcObject unset and the feed black.
- *
- *  Fix: Add `isVideoOff` to the dependency array. When isVideoOff goes
- *  false→true→false, the useEffect runs, finds the newly-mounted <video>
- *  element via videoRef, and re-attaches srcObject. We also call .play()
- *  to ensure autoplay resumes after the DOM re-insertion.
+ *  - Animated emoji reaction badges and floating reaction overlay
  */
 
 import { useEffect, useRef } from "react";
 import { MicOff, VideoOff, Crown } from "lucide-react";
-import { RemotePeer } from "@/hooks/useWebRTC";
+import { RemotePeer, ReactionEvent } from "@/hooks/useWebRTC";
 
 // ---------------------------------------------------------------------------
 // VideoTile — single participant card
@@ -46,6 +36,7 @@ interface VideoTileProps {
   isLocal?: boolean;
   isHost?: boolean;
   isSpeaking?: boolean;
+  reactionEmoji?: string;
 }
 
 function VideoTile({
@@ -56,29 +47,15 @@ function VideoTile({
   isLocal = false,
   isHost = false,
   isSpeaking = false,
+  reactionEmoji,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  /**
-   * CRITICAL FIX — srcObject re-attachment on camera toggle.
-   *
-   * When the user toggles camera OFF, the <video> element unmounts (replaced
-   * by the avatar fallback). When toggled back ON, a fresh <video> element
-   * mounts into the DOM — its srcObject is null by default.
-   *
-   * Adding `isVideoOff` to the dependency array ensures this effect re-runs
-   * whenever the video element remounts, so srcObject is always attached.
-   * Without this, the feed would show a black box after toggle-on.
-   *
-   * We call .play() because autoplay behaviour can be suppressed after a
-   * DOM re-insertion in some browsers (especially Safari).
-   */
   useEffect(() => {
     if (videoRef.current && stream && !isVideoOff) {
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(() => {
-        // Autoplay may be blocked on first load (before user gesture).
-        // The browser will still render the frame when autoplay is allowed.
+        // Autoplay play handling
       });
     }
   }, [stream, isVideoOff]);
@@ -123,7 +100,7 @@ function VideoTile({
         </div>
       )}
 
-      {/* Name label */}
+      {/* Bottom overlay: Name badge & audio status */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {isHost && (
@@ -156,6 +133,13 @@ function VideoTile({
           </div>
         </div>
       )}
+
+      {/* Reaction Badge on Tile */}
+      {reactionEmoji && (
+        <div className="absolute top-2 left-2 bg-[#1C1C1E]/90 border border-[#3A3A3C] rounded-full px-2.5 py-1 text-lg shadow-lg animate-bounce z-10">
+          {reactionEmoji}
+        </div>
+      )}
     </div>
   );
 }
@@ -172,6 +156,7 @@ interface VideoGridProps {
   remotePeers: RemotePeer[];
   /** When true, remote video feeds are not rendered (low-bandwidth mode) */
   stopIncomingVideo?: boolean;
+  reactions?: ReactionEvent[];
 }
 
 export default function VideoGrid({
@@ -182,6 +167,7 @@ export default function VideoGrid({
   isLocalHost,
   remotePeers,
   stopIncomingVideo = false,
+  reactions = [],
 }: VideoGridProps) {
   const totalParticipants = 1 + remotePeers.length;
 
@@ -195,36 +181,58 @@ export default function VideoGrid({
       ? "grid-cols-2"
       : "grid-cols-3";
 
-  return (
-    <div
-      className={`
-        grid ${gridCols} gap-3 p-4 h-full overflow-y-auto
-        auto-rows-fr
-      `}
-    >
-      {/* Local video tile — always first */}
-      <VideoTile
-        stream={localStream}
-        displayName={localDisplayName}
-        isMuted={localIsMuted}
-        isVideoOff={localIsVideoOff}
-        isLocal
-        isHost={isLocalHost}
-      />
+  // Find active reaction for local user (if any)
+  const localReaction = reactions.find(
+    (r) => r.sender === localDisplayName || r.peerId === "local"
+  );
 
-      {/* Remote peer tiles */}
-      {remotePeers.map((peer) => (
+  return (
+    <div className="relative h-full w-full overflow-hidden">
+      <div
+        className={`
+          grid ${gridCols} gap-3 p-4 h-full overflow-y-auto
+          auto-rows-fr
+        `}
+      >
+        {/* Local video tile — always first */}
         <VideoTile
-          key={peer.peerId}
-          stream={peer.stream}
-          displayName={peer.displayName}
-          isMuted={peer.isMuted}
-          // Respect both the peer's own video state and the host's
-          // "Stop Incoming Video" low-bandwidth mode toggle
-          isVideoOff={peer.isVideoOff || stopIncomingVideo}
-          isHost={false}
+          stream={localStream}
+          displayName={localDisplayName}
+          isMuted={localIsMuted}
+          isVideoOff={localIsVideoOff}
+          isLocal
+          isHost={isLocalHost}
+          reactionEmoji={localReaction?.emoji}
         />
-      ))}
+
+        {/* Remote peer cards */}
+        {remotePeers.map((peer) => {
+          const peerReaction = reactions.find((r) => r.peerId === peer.peerId);
+          return (
+            <VideoTile
+              key={peer.peerId}
+              stream={stopIncomingVideo ? null : peer.stream}
+              displayName={peer.displayName}
+              isMuted={peer.isMuted}
+              isVideoOff={peer.isVideoOff || stopIncomingVideo}
+              reactionEmoji={peerReaction?.emoji}
+            />
+          );
+        })}
+      </div>
+
+      {/* Floating Screen Reactions Overlay (Zoom Workplace Desktop Style) */}
+      <div className="fixed bottom-24 left-6 z-40 pointer-events-none flex flex-col-reverse gap-2 max-h-60 overflow-hidden">
+        {reactions.map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center gap-2 bg-[#1C1C1E]/95 border border-[#3A3A3C] rounded-full px-3.5 py-1.5 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-300 pointer-events-auto"
+          >
+            <span className="text-xl animate-bounce">{r.emoji}</span>
+            <span className="text-white text-xs font-medium">{r.sender}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

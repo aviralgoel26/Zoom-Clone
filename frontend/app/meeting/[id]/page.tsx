@@ -237,6 +237,8 @@ export default function MeetingPage() {
     stopShareScreen,
     messages,
     sendChatMessage,
+    reactions,
+    sendReaction,
   } = useWebRTC({
     meetingId: meetingCode,
     displayName: displayName || "Guest",
@@ -535,6 +537,7 @@ export default function MeetingPage() {
               isLocalHost={mutableRole === "host"}
               remotePeers={remotePeers}
               stopIncomingVideo={stopIncomingVideo}
+              reactions={reactions}
             />
           )}
         </div>
@@ -596,6 +599,7 @@ export default function MeetingPage() {
             setShowChat((v) => !v);
             setShowParticipants(false);
           }}
+          onSendReaction={sendReaction}
         />
       )}
     </div>

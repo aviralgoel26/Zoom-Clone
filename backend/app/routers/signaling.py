@@ -154,6 +154,13 @@ async def websocket_signaling(websocket: WebSocket, meeting_id: str):
                 # In-meeting text chat relay.
                 await manager.broadcast(message, meeting_id, sender=websocket)
 
+            elif msg_type == "reaction":
+                # In-meeting emoji reaction broadcast (relayed to all room members).
+                logger.info(
+                    f"[WS] reaction '{message.get('emoji')}' in room {meeting_id}"
+                )
+                await manager.broadcast_to_all(message, meeting_id)
+
             else:
                 logger.warning(f"[WS] Unknown message type: {msg_type}")
 

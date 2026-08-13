@@ -71,6 +71,7 @@ interface ControlsBarProps {
   showParticipants: boolean;
   showChat?: boolean;
   onToggleChat?: () => void;
+  onSendReaction?: (emoji: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +94,7 @@ export default function ControlsBar({
   showParticipants,
   showChat = false,
   onToggleChat,
+  onSendReaction,
 }: ControlsBarProps) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -247,16 +249,18 @@ export default function ControlsBar({
               ref={reactMenuRef}
               className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-[#2C2C2E] border border-[#3A3A3C] rounded-2xl shadow-2xl p-3 z-50"
             >
-              <div className="flex gap-2">
-                {["👍", "❤️", "😂", "😮", "👏", "🎉"].map((emoji) => (
+              <div className="flex gap-2 items-center">
+                {["👍", "❤️", "😂", "😮", "👏", "🎉", "✋"].map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => {
                       setShowReactMenu(false);
-                      // Placeholder: emoji reaction broadcast
+                      if (onSendReaction) {
+                        onSendReaction(emoji);
+                      }
                     }}
-                    className="text-xl hover:scale-125 transition-transform p-1 rounded-lg hover:bg-[#3A3A3C]"
-                    title={emoji}
+                    className="text-xl hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-[#3A3A3C] cursor-pointer"
+                    title={emoji === "✋" ? "Raise Hand" : emoji}
                   >
                     {emoji}
                   </button>

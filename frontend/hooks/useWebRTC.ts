@@ -58,6 +58,14 @@ export interface ChatMessage {
   isSelf: boolean;
 }
 
+export interface ReactionEvent {
+  id: string;
+  emoji: string;
+  sender: string;
+  peerId: string;
+  timestamp: number;
+}
+
 interface UseWebRTCOptions {
   meetingId: string;
   displayName: string;
@@ -91,6 +99,9 @@ interface UseWebRTCReturn {
   // In-meeting chat
   messages: ChatMessage[];
   sendChatMessage: (text: string) => void;
+  // Emoji reactions
+  reactions: ReactionEvent[];
+  sendReaction: (emoji: string) => void;
 }
 
 // ICE configuration — Google's public STUN server for NAT traversal.
@@ -119,6 +130,7 @@ export function useWebRTC({
     RTCPeerConnectionState | "connecting" | "disconnected"
   >("connecting");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [reactions, setReactions] = useState<ReactionEvent[]>([]);
 
   // Refs — survive re-renders without triggering them
   const wsRef = useRef<WebSocket | null>(null);
@@ -439,6 +451,20 @@ export function useWebRTC({
             isSelf: false,
           };
           setMessages((prev) => [...prev, chatMsg]);
+
+        } else if (type === "reaction") {
+          const reactionEvt: ReactionEvent = {
+            id: (message.id as string) || Math.random().toString(36).substring(2, 9),
+            emoji: (message.emoji as string) ?? "👍",
+            sender: (message.sender as string) ?? "Guest",
+            peerId: (message.peerId as string) ?? "",
+            timestamp: Date.now(),
+          };
+          setReactions((prev) => [...prev, reactionEvt]);
+
+          setTimeout(() => {
+            setReactions((prev) => prev.filter((r) => r.id !== reactionEvt.id));
+          }, 3500);
         }
       };
 
@@ -761,6 +787,37 @@ export function useWebRTC({
     [displayName]
   );
 
+  /** Send an emoji reaction to all room participants */
+  const sendReaction = useCallback(
+    (emoji: string) => {
+      const reactionId = Math.random().toString(36).substring(2, 9);
+      const payload = {
+        type: "reaction",
+        id: reactionId,
+        emoji,
+        sender: displayName,
+        peerId: myPeerIdRef.current,
+      };
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify(payload));
+      } else {
+        const reactionEvt: ReactionEvent = {
+          id: reactionId,
+          emoji,
+          sender: displayName,
+          peerId: myPeerIdRef.current,
+          timestamp: Date.now(),
+        };
+        setReactions((prev) => [...prev, reactionEvt]);
+        setTimeout(() => {
+          setReactions((prev) => prev.filter((r) => r.id !== reactionId));
+        }, 3500);
+      }
+    },
+    [displayName]
+  );
+
   return {
     localStream,
     remotePeers,
@@ -782,5 +839,7 @@ export function useWebRTC({
     stopShareScreen,
     messages,
     sendChatMessage,
+    reactions,
+    sendReaction,
   };
 }
