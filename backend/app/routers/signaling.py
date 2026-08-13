@@ -126,7 +126,13 @@ async def websocket_signaling(websocket: WebSocket, meeting_id: str):
 
             # Step 4 — Route message based on type
             if msg_type in ("offer", "answer", "ice-candidate"):
-                await manager.broadcast(message, meeting_id, sender=websocket)
+                target_peer = message.get("targetPeerId")
+                if target_peer:
+                    sent = await manager.send_to_peer(message, str(target_peer))
+                    if not sent:
+                        await manager.broadcast(message, meeting_id, sender=websocket)
+                else:
+                    await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type in ("participant-joined", "name-update"):
                 await manager.broadcast(message, meeting_id, sender=websocket)

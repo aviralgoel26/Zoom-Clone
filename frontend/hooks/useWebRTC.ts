@@ -290,7 +290,10 @@ export function useWebRTC({
       };
 
       pc.onconnectionstatechange = () => {
-        setConnectionState(pc.connectionState);
+        console.log(`[WebRTC] Peer ${peerId} connection state: ${pc.connectionState}`);
+        if (pc.connectionState === "connected") {
+          setConnectionState("connected" as any);
+        }
       };
 
       peerConnectionsRef.current.set(peerId, pc);
@@ -326,6 +329,7 @@ export function useWebRTC({
 
       ws.onopen = () => {
         console.log("[WS] Connection established.");
+        setConnectionState("connected" as any);
         ws.send(
           JSON.stringify({
             type: "participant-joined",
@@ -352,6 +356,7 @@ export function useWebRTC({
 
         } else if (type === "participant-joined") {
           const remotePeerId = message.peerId as string;
+          if (!remotePeerId || remotePeerId === myPeerIdRef.current) return;
           const remoteDisplayName = (message.displayName as string) ?? "Guest";
           const remoteRole = (message.role as "host" | "participant") ?? "participant";
           console.log(`[WS] Peer joined: ${remotePeerId} (${remoteDisplayName}, ${remoteRole})`);
@@ -382,6 +387,7 @@ export function useWebRTC({
 
         } else if (type === "offer") {
           const remotePeerId = message.fromPeerId as string;
+          if (!remotePeerId || remotePeerId === myPeerIdRef.current) return;
           const remoteDisplayName = (message.displayName as string) ?? "Guest";
           const remoteRole = (message.role as "host" | "participant") ?? "participant";
           console.log(`[WS] Received offer from: ${remotePeerId} (${remoteDisplayName}, ${remoteRole})`);
