@@ -36,6 +36,8 @@ import {
   Shield,
   LayoutGrid,
   User,
+  Users,
+  Link2,
 } from "lucide-react";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import VideoGrid, { ViewMode } from "@/components/VideoGrid";
@@ -62,13 +64,6 @@ export default function MeetingPage() {
 
   /**
    * HOST AUTHORIZATION — URL-param-only role assignment.
-   *
-   * ?host=true is appended ONLY by handleNewMeeting() on the dashboard.
-   * Anyone joining via a shared link, Meeting ID input, or the meetings list
-   * "Start" button does NOT get this param and enters as participant.
-   *
-   * The UI role selector has been removed — there is no way for a participant
-   * to self-elevate to host through the client.
    */
   const isHostFromQuery = searchParams.get("host") === "true";
 
@@ -87,16 +82,13 @@ export default function MeetingPage() {
   const [displayName, setDisplayName] = useState(() => {
     return getStoredUser()?.display_name || "";
   });
-  /**
-   * Role is read-only after derivation — no setter exposed.
-   * isHostFromQuery is true only when ?host=true is in the URL.
-   */
   const role: "host" | "participant" = isHostFromQuery ? "host" : "participant";
   const [lobbyAudioOn, setLobbyAudioOn] = useState(true);
   const [lobbyVideoOn, setLobbyVideoOn] = useState(true);
   const lobbyVideoRef = useRef<HTMLVideoElement>(null);
   const lobbyStreamRef = useRef<MediaStream | null>(null);
   const [participantRecordId, setParticipantRecordId] = useState<number | null>(null);
+  const [isJoining, setIsJoining] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Meeting state
@@ -107,12 +99,10 @@ export default function MeetingPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [stopIncomingVideo, setStopIncomingVideo] = useState(false);
   const [mutableRole, setMutableRole] = useState<"host" | "participant">(role);
-  /** View mode — grid (default) or speaker (one large + thumbnails) */
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  /** Duration in seconds since joining the meeting */
   const [durationSecs, setDurationSecs] = useState(0);
 
-  // Duration count-up timer — starts when phase transitions to "meeting"
+  // Duration count-up timer
   useEffect(() => {
     if (phase !== "meeting") return;
     setDurationSecs(0);
@@ -121,7 +111,7 @@ export default function MeetingPage() {
   }, [phase]);
 
   // ---------------------------------------------------------------------------
-  // Step 1: Validate meeting code on mount & update page title to suppress Chrome note popup
+  // Step 1: Validate meeting code on mount
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (meetingCode) {
@@ -178,7 +168,6 @@ export default function MeetingPage() {
     };
     startPreview();
 
-    // Cleanup lobby stream when leaving lobby phase
     return () => {
       lobbyStreamRef.current?.getTracks().forEach((t) => t.stop());
       lobbyStreamRef.current = null;
@@ -200,33 +189,32 @@ export default function MeetingPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // Step 3: Join — stop lobby stream, record participant, enter meeting phase
+  // Step 3: Join
   // ---------------------------------------------------------------------------
   const handleJoin = async () => {
     if (!displayName.trim() || !meetingInfo?.meeting_id) return;
+    setIsJoining(true);
 
-    // Stop lobby preview stream — useWebRTC will acquire fresh streams
     lobbyStreamRef.current?.getTracks().forEach((t) => t.stop());
     lobbyStreamRef.current = null;
 
     try {
-      // Record participant entry in DB with URL-derived role (never user-selected)
       const p = await joinMeeting(
         meetingInfo.meeting_id,
         displayName.trim(),
-        role   // <-- always from URL param, never from a UI dropdown
+        role
       );
       setParticipantRecordId(p.id);
     } catch {
-      // Non-blocking: even if DB write fails, let user into the room
       console.warn("Could not record participant in DB");
     }
 
     setPhase("meeting");
+    setIsJoining(false);
   };
 
   // ---------------------------------------------------------------------------
-  // Meeting Room — WebRTC hook (only active in meeting phase)
+  // Meeting Room — WebRTC hook
   // ---------------------------------------------------------------------------
   const {
     localStream,
@@ -257,10 +245,6 @@ export default function MeetingPage() {
     displayName: displayName || "Guest",
     role: mutableRole,
     onPeerCountChange: setPeerCount,
-    /**
-     * Fired when this client receives a "make-host" WS message targeting us.
-     * Elevates our local role so host controls become visible.
-     */
     onBecameHost: () => {
       setMutableRole("host");
     },
@@ -272,7 +256,7 @@ export default function MeetingPage() {
   // Leave / End handlers
   // ---------------------------------------------------------------------------
   const handleLeave = useCallback(async () => {
-    leaveCall(); // Stops local tracks + closes WS
+    leaveCall();
 
     if (participantRecordId && meetingInfo?.meeting_id) {
       try {
@@ -286,8 +270,8 @@ export default function MeetingPage() {
   }, [leaveCall, participantRecordId, meetingInfo, router]);
 
   const handleEndMeetingForAll = useCallback(async () => {
-    endMeetingForAll(); // Broadcasts WS signal 'end-meeting' to all room participants
-    leaveCall(); // Stops local tracks
+    endMeetingForAll();
+    leaveCall();
 
     if (meetingInfo?.meeting_id) {
       try {
@@ -304,7 +288,6 @@ export default function MeetingPage() {
   }, [endMeetingForAll, leaveCall, participantRecordId, meetingInfo, router]);
 
   const handleCopyLink = async () => {
-    // Copy clean participant join link without ?host=true
     const cleanUrl = window.location.origin + window.location.pathname;
     await navigator.clipboard.writeText(cleanUrl);
     setLinkCopied(true);
@@ -324,10 +307,20 @@ export default function MeetingPage() {
   // ---------------------------------------------------------------------------
   if (phase === "validating") {
     return (
-      <div className="min-h-screen bg-[#131314] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 text-[#0E72ED] animate-spin mx-auto mb-3" />
-          <p className="text-[#8E8E93] text-sm">Verifying meeting...</p>
+      <div className="min-h-screen bg-[#0A0A0F] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#0E72ED] to-[#5B5FDE] flex items-center justify-center shadow-lg shadow-[#0E72ED]/30">
+              <Video className="w-7 h-7 text-white" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#0A0A0F] rounded-full flex items-center justify-center">
+              <Loader2 className="w-3.5 h-3.5 text-[#0E72ED] animate-spin" />
+            </div>
+          </div>
+          <div className="text-center">
+            <p className="text-white font-semibold text-sm">Verifying meeting</p>
+            <p className="text-[#6E6E7A] text-xs mt-0.5 font-mono">{meetingCode}</p>
+          </div>
         </div>
       </div>
     );
@@ -338,19 +331,20 @@ export default function MeetingPage() {
   // ---------------------------------------------------------------------------
   if (phase === "error") {
     return (
-      <div className="min-h-screen bg-[#131314] flex items-center justify-center p-4">
-        <div className="bg-[#1C1C1E] border border-[#2C2C2E] rounded-2xl p-8 max-w-md w-full text-center">
-          <div className="w-14 h-14 rounded-full bg-[#FF3B30]/10 flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-7 h-7 text-[#FF3B30]" />
+      <div className="min-h-screen bg-[#0A0A0F] flex items-center justify-center p-4">
+        <div
+          className="max-w-md w-full text-center rounded-3xl p-8 border border-white/10"
+          style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(20px)" }}
+        >
+          <div className="w-16 h-16 rounded-full bg-[#FF3B30]/10 border border-[#FF3B30]/20 flex items-center justify-center mx-auto mb-5">
+            <AlertCircle className="w-8 h-8 text-[#FF3B30]" />
           </div>
-          <h2 className="text-white font-semibold text-lg mb-2">
-            Meeting Not Found
-          </h2>
-          <p className="text-[#8E8E93] text-sm mb-6">{errorMessage}</p>
+          <h2 className="text-white font-bold text-xl mb-2">Meeting Not Found</h2>
+          <p className="text-[#8E8E93] text-sm mb-7 leading-relaxed">{errorMessage}</p>
           <button
             id="error-back-home"
             onClick={() => router.push("/")}
-            className="bg-[#0E72ED] hover:bg-[#1A7FF0] text-white font-medium px-6 py-2.5 rounded-xl text-sm transition"
+            className="bg-gradient-to-r from-[#0E72ED] to-[#5B5FDE] hover:opacity-90 text-white font-semibold px-8 py-3 rounded-xl text-sm transition-all shadow-lg shadow-[#0E72ED]/30 cursor-pointer"
           >
             Back to Home
           </button>
@@ -360,149 +354,237 @@ export default function MeetingPage() {
   }
 
   // ---------------------------------------------------------------------------
-  // Render: Lobby (Pre-Join)
+  // Render: Lobby (Pre-Join) — PREMIUM REDESIGN
   // ---------------------------------------------------------------------------
   if (phase === "lobby") {
+    const initial = (displayName || "?").charAt(0).toUpperCase();
+
     return (
-      <div className="min-h-screen bg-[#131314] flex items-center justify-center p-4">
-        <div className="bg-[#1C1C1E] border border-[#2C2C2E] rounded-2xl overflow-hidden max-w-3xl w-full shadow-2xl">
-          <div className="grid md:grid-cols-2">
-            {/* Left — Camera preview */}
-            <div className="bg-[#0D0D0E] relative aspect-video md:aspect-auto min-h-[240px] flex items-center justify-center">
-              {lobbyVideoOn ? (
-                <video
-                  ref={lobbyVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#0E72ED] to-[#00A3FF] flex items-center justify-center text-white text-2xl font-bold">
-                    {(displayName || "?").charAt(0).toUpperCase()}
-                  </div>
-                  <p className="text-[#8E8E93] text-sm">Camera is off</p>
-                </div>
-              )}
+      <div
+        className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+        style={{ background: "linear-gradient(135deg, #0A0A0F 0%, #0D1117 50%, #0A0F1E 100%)" }}
+      >
+        {/* Ambient background glows */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-10 pointer-events-none"
+          style={{ background: "radial-gradient(circle, #0E72ED 0%, transparent 70%)", filter: "blur(60px)" }} />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full opacity-8 pointer-events-none"
+          style={{ background: "radial-gradient(circle, #5B5FDE 0%, transparent 70%)", filter: "blur(80px)" }} />
 
-              {/* Preview controls */}
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3">
-                <button
-                  id="lobby-toggle-audio"
-                  onClick={toggleLobbyAudio}
-                  className={`p-3 rounded-full transition ${
-                    lobbyAudioOn
-                      ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]"
-                      : "bg-[#FF3B30] text-white"
-                  }`}
-                >
-                  {lobbyAudioOn ? (
-                    <Mic className="w-5 h-5" />
-                  ) : (
-                    <MicOff className="w-5 h-5" />
-                  )}
-                </button>
-                <button
-                  id="lobby-toggle-video"
-                  onClick={toggleLobbyVideo}
-                  className={`p-3 rounded-full transition ${
-                    lobbyVideoOn
-                      ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]"
-                      : "bg-[#FF3B30] text-white"
-                  }`}
-                >
-                  {lobbyVideoOn ? (
-                    <Video className="w-5 h-5" />
-                  ) : (
-                    <VideoOff className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-            </div>
+        <div className="relative z-10 w-full max-w-4xl">
+          {/* Top label */}
+          <div className="flex items-center justify-center gap-2 mb-6">
+            <div className="w-2 h-2 rounded-full bg-[#34C759] animate-pulse" />
+            <span className="text-[#8E8EA0] text-sm font-medium">Ready to join</span>
+          </div>
 
-            {/* Right — Join form */}
-            <div className="p-6 flex flex-col justify-center gap-5">
-              <div>
-                <h1 className="text-white font-bold text-xl">
-                  {meetingInfo?.title ?? "Join Meeting"}
-                </h1>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[#8E8E93] text-sm font-mono">
-                    {meetingCode}
-                  </span>
-                  <button
-                    id="lobby-copy-link"
-                    onClick={handleCopyLink}
-                    className="text-[#0E72ED] hover:text-[#1A7FF0] transition"
-                    title="Copy invite link"
-                  >
-                    {linkCopied ? (
-                      <Check className="w-3.5 h-3.5 text-[#34C759]" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
+          <div
+            className="rounded-3xl overflow-hidden border border-white/10 shadow-2xl"
+            style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(24px)" }}
+          >
+            <div className="grid md:grid-cols-[1.1fr_0.9fr]">
 
-                {/* Role badge — read-only, derived from URL param */}
-                {isHostFromQuery && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <div className="flex items-center gap-1 bg-[#FF9500]/10 text-[#FF9500] px-2 py-0.5 rounded-full">
-                      <Shield className="w-3 h-3" />
-                      <span className="text-xs font-medium">You are the Host</span>
+              {/* ── Left: Camera Preview ──────────────────────────── */}
+              <div className="relative bg-[#080810] flex items-center justify-center overflow-hidden min-h-[300px] md:min-h-[420px]">
+                {lobbyVideoOn ? (
+                  <video
+                    ref={lobbyVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-2xl"
+                      style={{ background: "linear-gradient(135deg, #0E72ED, #5B5FDE)" }}>
+                      {initial}
                     </div>
+                    <p className="text-[#6E6E7A] text-sm">Camera is off</p>
                   </div>
                 )}
+
+                {/* Gradient vignette overlay */}
+                <div className="absolute inset-0 pointer-events-none"
+                  style={{ background: "linear-gradient(to top, rgba(8,8,16,0.8) 0%, transparent 50%)" }} />
+
+                {/* Preview controls — bottom center */}
+                <div className="absolute bottom-5 left-0 right-0 flex justify-center gap-3 z-10">
+                  <button
+                    id="lobby-toggle-audio"
+                    onClick={toggleLobbyAudio}
+                    title={lobbyAudioOn ? "Mute" : "Unmute"}
+                    className={`group relative flex flex-col items-center gap-1 cursor-pointer`}
+                  >
+                    <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${
+                      lobbyAudioOn
+                        ? "bg-white/15 hover:bg-white/25 border border-white/20 text-white backdrop-blur-md"
+                        : "bg-[#FF3B30] hover:bg-[#E0321A] text-white"
+                    }`}>
+                      {lobbyAudioOn ? <Mic className="w-4.5 h-4.5" /> : <MicOff className="w-4.5 h-4.5" />}
+                    </div>
+                    <span className="text-[10px] text-white/60 font-medium">
+                      {lobbyAudioOn ? "Mute" : "Unmuted"}
+                    </span>
+                  </button>
+
+                  <button
+                    id="lobby-toggle-video"
+                    onClick={toggleLobbyVideo}
+                    title={lobbyVideoOn ? "Stop video" : "Start video"}
+                    className="group relative flex flex-col items-center gap-1 cursor-pointer"
+                  >
+                    <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${
+                      lobbyVideoOn
+                        ? "bg-white/15 hover:bg-white/25 border border-white/20 text-white backdrop-blur-md"
+                        : "bg-[#FF3B30] hover:bg-[#E0321A] text-white"
+                    }`}>
+                      {lobbyVideoOn ? <Video className="w-4.5 h-4.5" /> : <VideoOff className="w-4.5 h-4.5" />}
+                    </div>
+                    <span className="text-[10px] text-white/60 font-medium">
+                      {lobbyVideoOn ? "Stop" : "Start"}
+                    </span>
+                  </button>
+                </div>
               </div>
 
-              {/* Display name input */}
-              <div>
-                <label
-                  htmlFor="lobby-display-name"
-                  className="block text-[#8E8E93] text-xs font-medium mb-1.5"
+              {/* ── Right: Join Form ──────────────────────────────── */}
+              <div className="p-8 flex flex-col justify-center gap-6">
+
+                {/* Meeting info */}
+                <div>
+                  <h1 className="text-white font-bold text-2xl leading-tight">
+                    {meetingInfo?.title ?? "Join Meeting"}
+                  </h1>
+
+                  {/* Meeting code + copy */}
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[#6E6E7A] text-sm font-mono tracking-wider">
+                      {meetingCode}
+                    </span>
+                    <button
+                      id="lobby-copy-link"
+                      onClick={handleCopyLink}
+                      className="flex items-center gap-1 text-xs text-[#0E72ED] hover:text-[#4A9EF7] transition-colors cursor-pointer"
+                      title="Copy invite link"
+                    >
+                      {linkCopied ? (
+                        <><Check className="w-3.5 h-3.5 text-[#34C759]" /><span className="text-[#34C759]">Copied!</span></>
+                      ) : (
+                        <><Link2 className="w-3.5 h-3.5" /><span>Copy link</span></>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Role badge */}
+                  {isHostFromQuery && (
+                    <div className="inline-flex items-center gap-1.5 mt-3 bg-[#FF9500]/10 border border-[#FF9500]/20 text-[#FF9500] px-3 py-1 rounded-full">
+                      <Shield className="w-3 h-3" />
+                      <span className="text-xs font-semibold">You are the Host</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Divider */}
+                <div className="h-px bg-white/8" />
+
+                {/* Display name input */}
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="lobby-display-name"
+                    className="block text-[#A0A0B8] text-xs font-semibold uppercase tracking-wider"
+                  >
+                    Your display name
+                  </label>
+                  <div className="relative flex items-center">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8EA0] pointer-events-none z-10" />
+                    <input
+                      id="lobby-display-name"
+                      type="text"
+                      placeholder="Enter your name"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+                      autoComplete="off"
+                      spellCheck={false}
+                      autoFocus
+                      className="w-full pr-4 py-3 rounded-xl text-sm text-white placeholder-[#6E6E8A] outline-none transition-all border"
+                      style={{
+                        paddingLeft: "42px",
+                        background: "rgba(255,255,255,0.06)",
+                        borderColor: displayName ? "rgba(14,114,237,0.6)" : "rgba(255,255,255,0.12)",
+                        boxShadow: displayName ? "0 0 0 3px rgba(14,114,237,0.12)" : "none",
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = "rgba(14,114,237,0.6)";
+                        e.target.style.boxShadow = "0 0 0 3px rgba(14,114,237,0.12)";
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = displayName ? "rgba(14,114,237,0.6)" : "rgba(255,255,255,0.12)";
+                        e.target.style.boxShadow = displayName ? "0 0 0 3px rgba(14,114,237,0.12)" : "none";
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Audio/Video status pills */}
+                <div className="flex items-center gap-2">
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                    lobbyAudioOn
+                      ? "bg-[#34C759]/10 border-[#34C759]/20 text-[#34C759]"
+                      : "bg-[#FF3B30]/10 border-[#FF3B30]/20 text-[#FF3B30]"
+                  }`}>
+                    {lobbyAudioOn ? <Mic className="w-3 h-3" /> : <MicOff className="w-3 h-3" />}
+                    {lobbyAudioOn ? "Audio on" : "Muted"}
+                  </div>
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                    lobbyVideoOn
+                      ? "bg-[#34C759]/10 border-[#34C759]/20 text-[#34C759]"
+                      : "bg-[#FF3B30]/10 border-[#FF3B30]/20 text-[#FF3B30]"
+                  }`}>
+                    {lobbyVideoOn ? <Video className="w-3 h-3" /> : <VideoOff className="w-3 h-3" />}
+                    {lobbyVideoOn ? "Video on" : "Video off"}
+                  </div>
+                </div>
+
+                {/* Join button */}
+                <button
+                  id="lobby-join-btn"
+                  onClick={handleJoin}
+                  disabled={!displayName.trim() || isJoining}
+                  className="w-full py-3.5 rounded-xl text-white font-semibold text-sm transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed relative overflow-hidden group"
+                  style={{
+                    background: displayName.trim()
+                      ? "linear-gradient(135deg, #0E72ED 0%, #1A7FF0 50%, #5B5FDE 100%)"
+                      : "rgba(255,255,255,0.08)",
+                    boxShadow: displayName.trim() ? "0 8px 32px rgba(14,114,237,0.4)" : "none",
+                  }}
                 >
-                  Your display name
-                </label>
-                <input
-                  id="lobby-display-name"
-                  type="text"
-                  placeholder="Enter your name"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="w-full bg-[#2C2C2E] text-white placeholder-[#8E8E93] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#0E72ED] transition"
-                  autoFocus
-                />
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ background: "linear-gradient(135deg, #1A7FF0 0%, #0E72ED 50%, #5B5FDE 100%)" }} />
+                  <span className="relative z-10 flex items-center gap-2">
+                    {isJoining ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ArrowRight className="w-4 h-4" />
+                    )}
+                    {isJoining ? "Joining..." : "Join Meeting"}
+                  </span>
+                </button>
+
+                <p className="text-[#4A4A5A] text-xs text-center leading-relaxed">
+                  {isHostFromQuery
+                    ? "You created this meeting and will join as Host"
+                    : "You will join as a participant"}
+                </p>
               </div>
 
-              {/*
-               * HOST AUTHORIZATION: Role selector has been REMOVED.
-               * The "host" / "participant" toggle buttons that previously
-               * allowed any user to self-assign the host role are gone.
-               * Role is determined solely by the ?host=true URL param,
-               * which is only appended by the "New Meeting" dashboard action.
-               */}
-
-              {/* Join button */}
-              <button
-                id="lobby-join-btn"
-                onClick={handleJoin}
-                disabled={!displayName.trim()}
-                className="w-full bg-[#0E72ED] hover:bg-[#1A7FF0] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2"
-              >
-                Join Meeting
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <p className="text-[#636366] text-xs text-center">
-                {isHostFromQuery
-                  ? "You created this meeting and will join as Host"
-                  : "You will join as a participant"}
-              </p>
             </div>
+          </div>
+
+          {/* Participant count hint */}
+          <div className="flex items-center justify-center gap-2 mt-5 text-[#4A4A5A] text-xs">
+            <Users className="w-3.5 h-3.5" />
+            <span>Others can join using the meeting code above</span>
           </div>
         </div>
       </div>
@@ -676,4 +758,3 @@ function LiveClock() {
 
   return <span className="text-[#8E8E93] text-sm font-mono">{time}</span>;
 }
-

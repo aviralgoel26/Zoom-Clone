@@ -1,0 +1,37 @@
+# render.yaml — Render Deployment Blueprint
+# -------------------------------------------
+# Deploys Zoom Clone as two linked Web Services:
+# 1. FastAPI Backend (Python / Uvicorn + WebSockets)
+# 2. Next.js Frontend (Node.js / React)
+
+services:
+  # ── 1. FastAPI Backend Service ───────────────────────────────────────────
+  - type: web
+    name: zoom-clone-backend
+    env: python
+    region: singapore
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+
+  # ── 2. Next.js Frontend Service ───────────────────────────────────────────
+  - type: web
+    name: zoom-clone-frontend
+    env: node
+    region: singapore
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18.17.0
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: zoom-clone-backend
+          property: host

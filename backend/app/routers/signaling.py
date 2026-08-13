@@ -129,9 +129,8 @@ async def websocket_signaling(websocket: WebSocket, meeting_id: str):
                 # other peer, so we relay to all (not just a specific target).
                 await manager.broadcast(message, meeting_id, sender=websocket)
 
-            elif msg_type == "participant-joined":
-                # New peer announces themselves — relay to others so they can
-                # initiate the WebRTC handshake.
+            elif msg_type in ("participant-joined", "name-update"):
+                # New peer announces themselves or updates display name — relay to others
                 await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type == "participant-left":

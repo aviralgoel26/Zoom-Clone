@@ -46,6 +46,7 @@ export interface RemotePeer {
   peerId: string;
   stream: MediaStream;
   displayName: string;
+  role?: "host" | "participant";
   isMuted: boolean;
   isVideoOff: boolean;
 }
@@ -139,19 +140,69 @@ export function useWebRTC({
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const peerDisplayNamesRef = useRef<Map<string, string>>(new Map());
+  const peerRolesRef = useRef<Map<string, "host" | "participant">>(new Map());
+  const displayNameRef = useRef<string>(displayName);
+  const roleRef = useRef<"host" | "participant">(role);
   const myPeerIdRef = useRef<string>(
     `peer-${Math.random().toString(36).substring(2, 9)}`
   );
-  // Guard: prevents opening a second WebSocket while one is already CONNECTING or OPEN
   const isConnectingRef = useRef(false);
+
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
+
+  // Sync displayName ref and broadcast updates to room if WebSocket is active
+  useEffect(() => {
+    displayNameRef.current = displayName;
+    if (
+      wsRef.current &&
+      wsRef.current.readyState === WebSocket.OPEN &&
+      displayName &&
+      displayName !== "Guest"
+    ) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "name-update",
+          peerId: myPeerIdRef.current,
+          displayName,
+          role: roleRef.current,
+        })
+      );
+    }
+  }, [displayName]);
+
+  // Helper to update remote peer's display name and role in state and refs
+  const updateRemotePeerInfo = useCallback(
+    (pId: string, name?: string, pRole?: "host" | "participant") => {
+      if (name && name !== "Guest") {
+        peerDisplayNamesRef.current.set(pId, name);
+      }
+      if (pRole) {
+        peerRolesRef.current.set(pId, pRole);
+      }
+      setRemotePeers((prev) =>
+        prev.map((p) => {
+          if (p.peerId === pId) {
+            return {
+              ...p,
+              displayName: name && name !== "Guest" ? name : p.displayName,
+              role: pRole || p.role,
+            };
+          }
+          return p;
+        })
+      );
+    },
+    []
+  );
 
   // ---------------------------------------------------------------------------
   // 1. Acquire local media (getUserMedia)
   // ---------------------------------------------------------------------------
   const initLocalStream = useCallback(async () => {
     try {
-      // Request both video and audio.
-      // The browser will show a permission prompt if not already granted.
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: { echoCancellation: true, noiseSuppression: true },
@@ -161,7 +212,6 @@ export function useWebRTC({
       return stream;
     } catch (err) {
       console.error("[WebRTC] getUserMedia failed:", err);
-      // Return null — video tile will show avatar instead
       return null;
     }
   }, []);
@@ -170,18 +220,25 @@ export function useWebRTC({
   // 2. Create RTCPeerConnection for a specific remote peer
   // ---------------------------------------------------------------------------
   const createPeerConnection = useCallback(
-    (peerId: string, peerDisplayName: string): RTCPeerConnection => {
+    (
+      peerId: string,
+      peerDisplayName: string,
+      peerRole?: "host" | "participant"
+    ): RTCPeerConnection => {
+      if (peerDisplayName && peerDisplayName !== "Guest") {
+        peerDisplayNamesRef.current.set(peerId, peerDisplayName);
+      }
+      if (peerRole) {
+        peerRolesRef.current.set(peerId, peerRole);
+      }
       const pc = new RTCPeerConnection(ICE_SERVERS);
 
-      // Add all local tracks to this peer connection so the remote peer
-      // receives our audio/video stream.
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => {
           pc.addTrack(track, localStreamRef.current!);
         });
       }
 
-      // ICE candidate generated locally → relay to remote peer via signaling WS.
       pc.onicecandidate = ({ candidate }) => {
         if (candidate && wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(
@@ -195,16 +252,27 @@ export function useWebRTC({
         }
       };
 
-      // Remote track received → attach to RemotePeer entry.
-      // ontrack fires once per track (audio and video arrive separately).
       pc.ontrack = ({ streams }) => {
         const [remoteStream] = streams;
         setRemotePeers((prev) => {
+          const resolvedName =
+            peerDisplayNamesRef.current.get(peerId) || peerDisplayName || "Guest";
+          const resolvedRole =
+            peerRolesRef.current.get(peerId) || peerRole || "participant";
           const exists = prev.find((p) => p.peerId === peerId);
           if (exists) {
-            // Update stream reference on existing entry
             return prev.map((p) =>
-              p.peerId === peerId ? { ...p, stream: remoteStream } : p
+              p.peerId === peerId
+                ? {
+                    ...p,
+                    stream: remoteStream,
+                    displayName:
+                      p.displayName && p.displayName !== "Guest"
+                        ? p.displayName
+                        : resolvedName,
+                    role: p.role || resolvedRole,
+                  }
+                : p
             );
           }
           return [
@@ -212,7 +280,8 @@ export function useWebRTC({
             {
               peerId,
               stream: remoteStream,
-              displayName: peerDisplayName,
+              displayName: resolvedName,
+              role: resolvedRole,
               isMuted: false,
               isVideoOff: false,
             },
@@ -220,7 +289,6 @@ export function useWebRTC({
         });
       };
 
-      // Track overall connection health for the MeetingHealth badge.
       pc.onconnectionstatechange = () => {
         setConnectionState(pc.connectionState);
       };
@@ -236,7 +304,6 @@ export function useWebRTC({
   // ---------------------------------------------------------------------------
   const initWebSocket = useCallback(
     (stream: MediaStream | null) => {
-      // Prevent duplicate socket creation if called more than once
       if (isConnectingRef.current) return;
       const wsUrl = buildWebSocketUrl(meetingId);
       if (!wsUrl) {
@@ -250,7 +317,7 @@ export function useWebRTC({
       try {
         ws = new WebSocket(wsUrl);
       } catch (err) {
-        console.warn("[WS] Failed to create WebSocket (invalid URL?):", err);
+        console.warn("[WS] Failed to create WebSocket:", err);
         isConnectingRef.current = false;
         setConnectionState("disconnected");
         return;
@@ -259,13 +326,12 @@ export function useWebRTC({
 
       ws.onopen = () => {
         console.log("[WS] Connection established.");
-        // Announce ourselves to existing room members
         ws.send(
           JSON.stringify({
             type: "participant-joined",
             peerId: myPeerIdRef.current,
-            displayName,
-            role,
+            displayName: displayNameRef.current || "Guest",
+            role: roleRef.current,
           })
         );
       };
@@ -281,21 +347,19 @@ export function useWebRTC({
         const { type } = message;
 
         if (type === "room-info") {
-          // Server sends current peer count on connect.
           const count = (message.peerCount as number) ?? 0;
           onPeerCountChange?.(count);
 
         } else if (type === "participant-joined") {
-          // A new peer arrived → WE create an offer and send it.
           const remotePeerId = message.peerId as string;
           const remoteDisplayName = (message.displayName as string) ?? "Guest";
-          console.log(`[WS] Peer joined: ${remotePeerId}`);
+          const remoteRole = (message.role as "host" | "participant") ?? "participant";
+          console.log(`[WS] Peer joined: ${remotePeerId} (${remoteDisplayName}, ${remoteRole})`);
 
-          const pc = createPeerConnection(remotePeerId, remoteDisplayName);
+          updateRemotePeerInfo(remotePeerId, remoteDisplayName, remoteRole);
 
-          // createOffer generates the SDP that describes our local media capabilities.
+          const pc = createPeerConnection(remotePeerId, remoteDisplayName, remoteRole);
           const offer = await pc.createOffer();
-          // setLocalDescription stores the SDP and triggers ICE candidate gathering.
           await pc.setLocalDescription(offer);
 
           ws.send(
@@ -304,25 +368,26 @@ export function useWebRTC({
               sdp: pc.localDescription,
               targetPeerId: remotePeerId,
               fromPeerId: myPeerIdRef.current,
-              displayName,
+              displayName: displayNameRef.current || "Guest",
+              role: roleRef.current,
             })
           );
 
         } else if (type === "offer") {
-          // We received an offer from a peer that joined before us.
           const remotePeerId = message.fromPeerId as string;
           const remoteDisplayName = (message.displayName as string) ?? "Guest";
-          console.log(`[WS] Received offer from: ${remotePeerId}`);
+          const remoteRole = (message.role as "host" | "participant") ?? "participant";
+          console.log(`[WS] Received offer from: ${remotePeerId} (${remoteDisplayName}, ${remoteRole})`);
 
-          const pc = createPeerConnection(remotePeerId, remoteDisplayName);
-          // setRemoteDescription stores the offer's SDP.
+          updateRemotePeerInfo(remotePeerId, remoteDisplayName, remoteRole);
+
+          const pc = createPeerConnection(remotePeerId, remoteDisplayName, remoteRole);
           await pc.setRemoteDescription(
             new RTCSessionDescription(
               message.sdp as RTCSessionDescriptionInit
             )
           );
 
-          // createAnswer generates our SDP response.
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
 
@@ -332,14 +397,19 @@ export function useWebRTC({
               sdp: pc.localDescription,
               targetPeerId: remotePeerId,
               fromPeerId: myPeerIdRef.current,
-              displayName,          // ← fix: include our name so caller renders it correctly
+              displayName: displayNameRef.current || "Guest",
+              role: roleRef.current,
             })
           );
 
         } else if (type === "answer") {
-          // The peer accepted our offer — now we know their displayName too.
           const remotePeerId = message.fromPeerId as string;
           const remoteDisplayName = (message.displayName as string) ?? "";
+          const remoteRole = (message.role as "host" | "participant") ?? undefined;
+          console.log(`[WS] Received answer from: ${remotePeerId} (${remoteDisplayName}, ${remoteRole})`);
+
+          updateRemotePeerInfo(remotePeerId, remoteDisplayName, remoteRole);
+
           const pc = peerConnectionsRef.current.get(remotePeerId);
           if (pc) {
             await pc.setRemoteDescription(
@@ -348,15 +418,14 @@ export function useWebRTC({
               )
             );
           }
-          // Update the name for this peer if it arrived before the track
-          if (remoteDisplayName) {
-            setRemotePeers((prev) =>
-              prev.map((p) =>
-                p.peerId === remotePeerId
-                  ? { ...p, displayName: remoteDisplayName }
-                  : p
-              )
-            );
+
+        } else if (type === "name-update") {
+          const remotePeerId = message.peerId as string;
+          const remoteDisplayName = (message.displayName as string) ?? "";
+          const remoteRole = (message.role as "host" | "participant") ?? undefined;
+          if (remotePeerId) {
+            console.log(`[WS] Peer updated info: ${remotePeerId} -> ${remoteDisplayName}`);
+            updateRemotePeerInfo(remotePeerId, remoteDisplayName, remoteRole);
           }
 
         } else if (type === "ice-candidate") {

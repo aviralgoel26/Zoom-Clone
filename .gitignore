@@ -12,12 +12,17 @@ dist/
 build/
 .eggs/
 
-# SQLite DB
+# Database files
 backend/sql_app.db
+*.db
+*.sqlite
+*.sqlite3
 
-# Node
+# Node & Next.js
 node_modules/
+frontend/node_modules/
 .next/
+frontend/.next/
 out/
 npm-debug.log*
 yarn-debug.log*
@@ -30,12 +35,22 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
-# OS
+# Screenshots & Cheatsheet
+INTERVIEW_CHEATSHEET.md
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+screenshots/
+media/
+.user_uploaded/
+
+# System / IDE
 .DS_Store
 Thumbs.db
-
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+.system_generated/

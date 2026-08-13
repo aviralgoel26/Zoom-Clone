@@ -208,7 +208,7 @@ export default function VideoGrid({
       isMuted: p.isMuted,
       isVideoOff: p.isVideoOff || stopIncomingVideo,
       isLocal: false,
-      isHost: false,
+      isHost: p.role === "host",
       reaction: reactions.find((r) => r.peerId === p.peerId)?.emoji,
     })),
   ];

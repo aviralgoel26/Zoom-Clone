@@ -22,6 +22,8 @@ import {
   Copy,
   Check,
   Sparkles,
+  User,
+  ArrowRight,
 } from "lucide-react";
 import {
   createInstantMeeting,
@@ -196,132 +198,166 @@ export default function DashboardPage() {
       </button>
 
       {/* ================================================================= */}
-      {/* JOIN MEETING MODAL                                                 */}
+      {/* JOIN MEETING MODAL — Premium Dark Design                           */}
       {/* ================================================================= */}
       {showJoinModal && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-xs"
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(8px)" }}
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowJoinModal(false);
           }}
         >
-          <div className="w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl p-6 space-y-4">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-[#131619]">
-                Join meeting
-              </h2>
-              <button
-                id="join-modal-close"
-                onClick={() => setShowJoinModal(false)}
-                className="p-1.5 rounded-lg hover:bg-[#F4F5F7] text-[#6E7683] hover:text-[#131619] transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Input 1: Meeting ID */}
-            <div>
-              <label
-                htmlFor="join-modal-meeting-id"
-                className="block text-xs font-medium text-[#6E7683] mb-1.5"
-              >
-                Meeting ID or personal link name
-              </label>
-              <input
-                id="join-modal-meeting-id"
-                type="text"
-                placeholder="e.g. 123-456-789"
-                value={joinModal.meetingId}
-                onChange={(e) =>
-                  setJoinModal((prev) => ({
-                    ...prev,
-                    meetingId: e.target.value,
-                  }))
-                }
-                onKeyDown={(e) => e.key === "Enter" && handleJoinMeeting()}
-                autoFocus
-                className="w-full h-10 px-3.5 text-sm rounded-xl border border-[#C8CBD0] focus:border-[#0E71EB] focus:ring-2 focus:ring-[#0E71EB]/15 transition-all outline-none bg-white text-[#131619]"
-              />
-            </div>
-
-            {/* Input 2: Display Name */}
-            <div>
-              <label
-                htmlFor="join-modal-display-name"
-                className="block text-xs font-medium text-[#6E7683] mb-1.5"
-              >
-                Your name
-              </label>
-              <input
-                id="join-modal-display-name"
-                type="text"
-                placeholder="Display name"
-                value={joinModal.displayName}
-                onChange={(e) =>
-                  setJoinModal((prev) => ({
-                    ...prev,
-                    displayName: e.target.value,
-                  }))
-                }
-                className="w-full h-10 px-3.5 text-sm rounded-xl border border-[#C8CBD0] focus:border-[#0E71EB] focus:ring-2 focus:ring-[#0E71EB]/15 transition-all outline-none bg-white text-[#131619]"
-              />
-            </div>
-
-            <div className="h-px bg-[#E2E4E8]" />
-
-            {/* Checkboxes */}
-            <div className="flex flex-col gap-3">
-              {(
-                [
-                  {
-                    id: "cb-remember",
-                    key: "rememberName" as const,
-                    label: "Remember my name for future meetings",
-                  },
-                  {
-                    id: "cb-no-audio",
-                    key: "noAudio" as const,
-                    label: "Don't connect to audio",
-                  },
-                  {
-                    id: "cb-no-video",
-                    key: "noVideo" as const,
-                    label: "Turn off my video",
-                  },
-                ] as const
-              ).map(({ id, key, label }) => (
-                <label
-                  key={id}
-                  htmlFor={id}
-                  className="flex items-center gap-3 cursor-pointer select-none"
+          <div
+            className="w-full max-w-md mx-4 rounded-3xl overflow-hidden shadow-2xl border border-white/10"
+            style={{ background: "rgba(18,18,28,0.98)", backdropFilter: "blur(24px)" }}
+          >
+            {/* Modal gradient header */}
+            <div className="px-7 pt-7 pb-5" style={{
+              background: "linear-gradient(135deg, rgba(14,114,237,0.15) 0%, rgba(91,95,222,0.10) 100%)",
+              borderBottom: "1px solid rgba(255,255,255,0.07)"
+            }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ background: "linear-gradient(135deg, #0E72ED, #5B5FDE)" }}>
+                    <Plus className="w-4.5 h-4.5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-bold text-base">Join a meeting</h2>
+                    <p className="text-[#6E6E8A] text-xs">Enter an ID or link to join</p>
+                  </div>
+                </div>
+                <button
+                  id="join-modal-close"
+                  onClick={() => setShowJoinModal(false)}
+                  className="p-2 rounded-xl text-[#6E6E8A] hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                  aria-label="Close"
                 >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Form body */}
+            <div className="px-7 py-6 space-y-5">
+              {/* Input 1: Meeting ID */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="join-modal-meeting-id"
+                  className="block text-xs font-semibold text-[#A0A0B8] uppercase tracking-wider"
+                >
+                  Meeting ID or link
+                </label>
+                <div className="relative flex items-center">
+                  <Video className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8EA0] pointer-events-none z-10" />
                   <input
-                    id={id}
-                    type="checkbox"
-                    checked={joinModal[key]}
+                    id="join-modal-meeting-id"
+                    type="text"
+                    placeholder="e.g. 123-456-789"
+                    value={joinModal.meetingId}
                     onChange={(e) =>
                       setJoinModal((prev) => ({
                         ...prev,
-                        [key]: e.target.checked,
+                        meetingId: e.target.value,
                       }))
                     }
-                    className="zoom-checkbox"
+                    onKeyDown={(e) => e.key === "Enter" && handleJoinMeeting()}
+                    autoFocus
+                    className="w-full pr-4 py-3 text-sm rounded-xl text-white placeholder-[#6E6E8A] outline-none transition-all border font-mono"
+                    style={{
+                      paddingLeft: "42px",
+                      background: "rgba(255,255,255,0.06)",
+                      borderColor: joinModal.meetingId ? "rgba(14,114,237,0.6)" : "rgba(255,255,255,0.12)",
+                    }}
                   />
-                  <span className="text-sm leading-tight text-[#131619]">
-                    {label}
-                  </span>
+                </div>
+              </div>
+
+              {/* Input 2: Display Name */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="join-modal-display-name"
+                  className="block text-xs font-semibold text-[#A0A0B8] uppercase tracking-wider"
+                >
+                  Your name
                 </label>
-              ))}
+                <div className="relative flex items-center">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8EA0] pointer-events-none z-10" />
+                  <input
+                    id="join-modal-display-name"
+                    type="text"
+                    placeholder="Display name"
+                    value={joinModal.displayName}
+                    onChange={(e) =>
+                      setJoinModal((prev) => ({
+                        ...prev,
+                        displayName: e.target.value,
+                      }))
+                    }
+                    className="w-full pr-4 py-3 text-sm rounded-xl text-white placeholder-[#6E6E8A] outline-none transition-all border"
+                    style={{
+                      paddingLeft: "42px",
+                      background: "rgba(255,255,255,0.06)",
+                      borderColor: joinModal.displayName ? "rgba(14,114,237,0.6)" : "rgba(255,255,255,0.12)",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
+
+              {/* Toggles row */}
+              <div className="flex flex-col gap-3">
+                {([
+                  { id: "cb-remember", key: "rememberName" as const, label: "Remember my name for future meetings" },
+                  { id: "cb-no-audio",  key: "noAudio" as const,      label: "Don't connect to audio" },
+                  { id: "cb-no-video",  key: "noVideo" as const,       label: "Turn off my video" },
+                ] as const).map(({ id, key, label }) => (
+                  <label
+                    key={id}
+                    htmlFor={id}
+                    className="flex items-center justify-between cursor-pointer select-none group"
+                  >
+                    <span className="text-sm text-[#C0C0D0] group-hover:text-white transition-colors leading-tight">
+                      {label}
+                    </span>
+                    <div className="relative flex-shrink-0 ml-3">
+                      <input
+                        id={id}
+                        type="checkbox"
+                        checked={joinModal[key]}
+                        onChange={(e) =>
+                          setJoinModal((prev) => ({
+                            ...prev,
+                            [key]: e.target.checked,
+                          }))
+                        }
+                        className="sr-only"
+                      />
+                      <div className={`w-10 h-5.5 rounded-full transition-all ${
+                        joinModal[key] ? "bg-[#0E72ED]" : "bg-white/15"
+                      }`}
+                        style={{ height: "22px", width: "40px" }}>
+                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${
+                          joinModal[key] ? "left-[22px]" : "left-0.5"
+                        }`} />
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
 
             {/* Action buttons */}
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="px-7 pb-7 flex items-center gap-3"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: "20px" }}>
               <button
                 id="join-modal-cancel"
                 onClick={() => setShowJoinModal(false)}
-                className="h-9 px-4 text-sm font-medium rounded-xl border border-[#C8CBD0] text-[#131619] hover:bg-[#F4F5F7] transition-colors cursor-pointer"
+                className="flex-1 h-11 text-sm font-semibold rounded-xl text-[#8E8EA0] hover:text-white transition-all cursor-pointer border border-white/10 hover:bg-white/8"
+                style={{ background: "rgba(255,255,255,0.04)" }}
               >
                 Cancel
               </button>
@@ -329,14 +365,22 @@ export default function DashboardPage() {
                 id="join-modal-submit"
                 onClick={handleJoinMeeting}
                 disabled={!joinModal.meetingId.trim()}
-                className="h-9 px-5 text-sm font-semibold rounded-xl text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-[#0E71EB] hover:bg-[#0B5EC4] cursor-pointer"
+                className="flex-1 h-11 text-sm font-semibold rounded-xl text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                style={{
+                  background: joinModal.meetingId.trim()
+                    ? "linear-gradient(135deg, #0E72ED, #5B5FDE)"
+                    : "rgba(255,255,255,0.08)",
+                  boxShadow: joinModal.meetingId.trim() ? "0 6px 24px rgba(14,114,237,0.35)" : "none",
+                }}
               >
+                <ArrowRight className="w-4 h-4" />
                 Join
               </button>
             </div>
           </div>
         </div>
       )}
+
 
       {/* ================================================================= */}
       {/* MAIN CONTAINER — Pixel-matched layout from screenshot             */}
