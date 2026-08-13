@@ -139,16 +139,16 @@ async def websocket_signaling(websocket: WebSocket, meeting_id: str):
                 await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type == "host-action":
-                # Host commands — broadcast to entire room so all clients
-                # can react based on (action, targetPeerId).
-                # Supported actions: mute-all, stop-all-video, mute-peer,
-                #   stop-video-peer, kick, make-host.
-                # See module docstring for full schema reference.
+                # Host commands — broadcast to room so all clients can react
                 action = message.get("action", "unknown")
                 logger.info(
                     f"[WS] host-action '{action}' in room {meeting_id}"
                 )
-                await manager.broadcast(message, meeting_id, sender=websocket)
+                if action == "end-meeting":
+                    # End meeting for ALL connected participants in room
+                    await manager.broadcast_to_all(message, meeting_id)
+                else:
+                    await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type == "chat-message":
                 # In-meeting text chat relay.

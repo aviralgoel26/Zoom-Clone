@@ -109,8 +109,17 @@ export default function MeetingPage() {
   const [mutableRole, setMutableRole] = useState<"host" | "participant">(role);
 
   // ---------------------------------------------------------------------------
-  // Step 1: Validate meeting code on mount
+  // Step 1: Validate meeting code on mount & update page title to suppress Chrome note popup
   // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (meetingCode) {
+      document.title = `Conference ${meetingCode}`;
+    }
+    return () => {
+      document.title = "Zoom Workplace — Web Conference App";
+    };
+  }, [meetingCode]);
+
   useEffect(() => {
     const validate = async () => {
       if (!meetingCode) {
@@ -223,6 +232,7 @@ export default function MeetingPage() {
     stopVideoPeer,
     makeHost,
     kickPeer,
+    endMeetingForAll,
     shareScreen,
     stopShareScreen,
     messages,
@@ -261,7 +271,8 @@ export default function MeetingPage() {
   }, [leaveCall, participantRecordId, meetingInfo, router]);
 
   const handleEndMeetingForAll = useCallback(async () => {
-    leaveCall(); // Stops all local tracks + WS
+    endMeetingForAll(); // Broadcasts WS signal 'end-meeting' to all room participants
+    leaveCall(); // Stops local tracks
 
     if (meetingInfo?.meeting_id) {
       try {
@@ -274,8 +285,8 @@ export default function MeetingPage() {
       }
     }
 
-    router.push("/");
-  }, [leaveCall, participantRecordId, meetingInfo, router]);
+    router.push("/?meetingEnded=true");
+  }, [endMeetingForAll, leaveCall, participantRecordId, meetingInfo, router]);
 
   const handleCopyLink = async () => {
     // Copy clean participant join link without ?host=true

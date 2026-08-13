@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
 from app.database import get_db
+from app.websocket_manager import manager
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -137,11 +138,17 @@ def leave_meeting(
 # End meeting (host action)
 # ---------------------------------------------------------------------------
 @router.post("/{meeting_id}/end", response_model=schemas.MeetingSchema)
-def end_meeting(meeting_id: int, db: Session = Depends(get_db)):
-    """Transition meeting status to 'ended'. Only the host should call this."""
+async def end_meeting(meeting_id: int, db: Session = Depends(get_db)):
+    """Transition meeting status to 'ended'. Broadcasts end-meeting to active room."""
     meeting = crud.update_meeting_status(
         db, meeting_id, models.MeetingStatus.ended
     )
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
+
+    if meeting.meeting_code:
+        await manager.broadcast_to_all(
+            {"type": "host-action", "action": "end-meeting"},
+            meeting.meeting_code,
+        )
     return meeting

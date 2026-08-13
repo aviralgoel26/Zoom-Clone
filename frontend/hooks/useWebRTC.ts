@@ -84,6 +84,7 @@ interface UseWebRTCReturn {
   stopVideoPeer: (peerId: string) => void;
   makeHost: (peerId: string) => void;
   kickPeer: (peerId: string) => void;
+  endMeetingForAll: () => void;
   // Screen sharing
   shareScreen: () => Promise<void>;
   stopShareScreen: () => void;
@@ -413,6 +414,12 @@ export function useWebRTC({
             cleanup();
             window.location.href = "/";
 
+          } else if (action === "end-meeting") {
+            // Host ended meeting for ALL connected participants in room
+            console.log("[WebRTC] Meeting ended for all by host.");
+            cleanup();
+            window.location.href = "/?meetingEnded=true";
+
           } else if (action === "make-host" && targetPeerId === myPeerIdRef.current) {
             // We've been promoted to host
             console.log("[WebRTC] We have been made host.");
@@ -712,6 +719,11 @@ export function useWebRTC({
     [sendHostAction]
   );
 
+  /** Broadcast end-meeting signal to all participants in the room */
+  const endMeetingForAll = useCallback(() => {
+    sendHostAction({ action: "end-meeting" });
+  }, [sendHostAction]);
+
   /** Send a chat message to all room participants */
   const sendChatMessage = useCallback(
     (text: string) => {
@@ -765,6 +777,7 @@ export function useWebRTC({
     stopVideoPeer,
     makeHost,
     kickPeer,
+    endMeetingForAll,
     shareScreen,
     stopShareScreen,
     messages,
