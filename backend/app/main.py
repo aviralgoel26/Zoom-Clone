@@ -91,6 +91,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Router registration
 # ---------------------------------------------------------------------------
+app.include_router(auth.router)             # REST: /api/auth/*
 app.include_router(meetings.router)     # REST: /api/meetings/*
 app.include_router(signaling.router)    # WS:   /ws/meeting/{meeting_id}
 

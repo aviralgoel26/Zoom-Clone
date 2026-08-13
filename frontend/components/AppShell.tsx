@@ -36,7 +36,7 @@ export default function AppShell({ children }: AppShellProps) {
       {/* ── Main Area (offset by sidebar width) ────────────── */}
       <div className="flex flex-col flex-1 min-w-0" style={{ marginLeft: "64px" }}>
         {/* Sticky top header */}
-        <DashboardHeader userName="Aviral Goel" />
+        <DashboardHeader />
 
         {/* Page content — offset by header height (56px) */}
         <main

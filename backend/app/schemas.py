@@ -107,3 +107,35 @@ class MeetingValidationResponse(BaseModel):
     title: Optional[str] = None
     status: Optional[str] = None
     meeting_code: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Auth schemas
+# ---------------------------------------------------------------------------
+class RegisterRequest(BaseModel):
+    """Payload for POST /api/auth/register."""
+    display_name: str
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    """Payload for POST /api/auth/login."""
+    email: str
+    password: str
+
+
+class AuthUserResponse(BaseModel):
+    """Embedded user info returned inside auth responses."""
+    id: int
+    display_name: str
+    email: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuthResponse(BaseModel):
+    """Full response for login / register — carries the JWT."""
+    access_token: str
+    token_type: str = "bearer"
+    user: AuthUserResponse

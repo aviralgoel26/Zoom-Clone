@@ -52,7 +52,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     display_name = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=True)       # optional
+    email = Column(String, unique=True, index=True, nullable=True)
+    hashed_password = Column(String, nullable=True)   # None for guest/OAuth users
     is_guest = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
