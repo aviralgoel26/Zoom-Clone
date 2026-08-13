@@ -119,6 +119,8 @@ async def websocket_signaling(websocket: WebSocket, meeting_id: str):
                 logger.warning(f"[WS] Non-JSON message received, ignoring.")
                 continue
 
+            msg_type = message.get("type", "")
+
             # Register peerId mapping if present in message
             peer_id_in_msg = message.get("peerId") or message.get("fromPeerId")
             if peer_id_in_msg:
