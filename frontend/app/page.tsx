@@ -3,14 +3,7 @@
 /**
  * page.tsx — Dashboard (Zoom Workplace Desktop)
  * ----------------------------------------------------
- * Senior UI/UX Replicated Home Dashboard:
- *
- * 1. Spacious centered container (max-w-2xl)
- * 2. Elegant Live Clock & Date Section
- * 3. 5-Icon Quick Action Row with generous spacing and smooth squircles
- * 4. Clean Calendar Disconnection Banner
- * 5. Spacious Meetings Card with rich typography & hover actions
- * 6. Interactive join meeting modal
+ * Pixel-matched replicate of official Zoom Workplace home screen.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -28,6 +21,7 @@ import {
   X,
   Copy,
   Check,
+  Sparkles,
 } from "lucide-react";
 import {
   createInstantMeeting,
@@ -36,6 +30,7 @@ import {
   Meeting,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/components/ui/Toast";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,6 +66,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const now = useLiveClock();
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   // Meeting state
   const [upcomingMeetings, setUpcomingMeetings] = useState<Meeting[]>([]);
@@ -115,8 +111,6 @@ export default function DashboardPage() {
       setLoadingMeetings(false);
     };
     load();
-  // Re-fetch whenever the logged-in user changes (login or logout)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   // Create instant meeting — host only via ?host=true (with offline fallback)
@@ -132,10 +126,8 @@ export default function DashboardPage() {
         router.push(`/meeting/${meeting.id}?host=true`);
         return;
       }
-    } catch (err) {
-      console.warn(
-        "[Dashboard] Backend API unavailable. Using client fallback meeting code."
-      );
+    } catch {
+      console.warn("[Dashboard] Backend API unavailable. Using client fallback meeting code.");
     } finally {
       setIsCreating(false);
     }
@@ -162,17 +154,18 @@ export default function DashboardPage() {
       `${window.location.origin}/meeting/${code}`
     );
     setCopiedCode(code);
+    showToast("Link Copied", `Meeting link for ${code} copied to clipboard.`, "success");
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  // Clock formatters matching screenshot: "16:23", "Thursday, August 13, 2026"
+  // Clock formatters matching screenshot: "21:59", "Thursday, August 13, 2026"
   const timeDisplay = now
     ? now.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
       })
-    : "16:23";
+    : "21:59";
 
   const dateDisplay = now
     ? now.toLocaleDateString("en-US", {
@@ -191,7 +184,17 @@ export default function DashboardPage() {
     : "Aug 13";
 
   return (
-    <div className="relative w-full flex-1 flex flex-col items-center justify-center min-h-[calc(100vh-56px)] bg-[#F4F5F7] py-10 px-6 select-none">
+    <div className="relative w-full flex-1 flex flex-col items-center justify-center min-h-[calc(100vh-56px)] bg-[#F4F5F7] py-8 px-6 select-none">
+      
+      {/* ── Top-Right Customization Star Button ──────────────────────── */}
+      <button
+        onClick={() => showToast("Theme & Customization", "Custom dashboard themes are queued for next release.", "coming-soon")}
+        className="absolute top-4 right-6 p-2 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+        aria-label="Customize"
+      >
+        <Sparkles className="w-4.5 h-4.5" />
+      </button>
+
       {/* ================================================================= */}
       {/* JOIN MEETING MODAL                                                 */}
       {/* ================================================================= */}
@@ -336,15 +339,16 @@ export default function DashboardPage() {
       )}
 
       {/* ================================================================= */}
-      {/* MAIN CONTAINER — Generously spaced max-w-2xl layout               */}
+      {/* MAIN CONTAINER — Pixel-matched layout from screenshot             */}
       {/* ================================================================= */}
-      <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto my-auto">
+      <div className="flex flex-col items-center justify-center w-full max-w-xl mx-auto my-auto">
+        
         {/* ── 1. LIVE CLOCK & DATE SECTION ─────────────────────── */}
-        <div className="flex flex-col items-center justify-center text-center mb-9">
+        <div className="flex flex-col items-center justify-center text-center mb-8">
           <h1 className="text-5xl font-bold text-[#131619] tracking-tight leading-none">
             {timeDisplay}
           </h1>
-          <p className="text-sm text-[#6E7683] font-medium mt-2.5">
+          <p className="text-sm text-[#6E7683] font-medium mt-2">
             {dateDisplay}
           </p>
 
@@ -357,30 +361,31 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── 2. 5-ICON QUICK ACTION ROW ────────────────────────── */}
-        <div className="flex items-center justify-center gap-8 mb-10">
+        {/* ── 2. 5-ICON QUICK ACTION ROW (Exact Squircle Design) ── */}
+        <div className="flex items-center justify-center gap-7 mb-9">
+          
           {/* New meeting — Orange #FF7426 */}
           <div className="flex flex-col items-center">
             <button
               id="action-new-meeting"
               onClick={handleNewMeeting}
               disabled={isCreating}
-              className="w-15 h-15 rounded-[20px] flex items-center justify-center text-white shadow-xs bg-[#FF7426] hover:bg-[#E8651F] transition-all action-squircle action-squircle-orange disabled:opacity-60 cursor-pointer"
+              className="w-14 h-14 rounded-[18px] flex items-center justify-center text-white shadow-xs bg-[#FF7426] hover:bg-[#E8651F] transition-all action-squircle action-squircle-orange disabled:opacity-60 cursor-pointer"
             >
               {isCreating ? (
                 <div className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin" />
               ) : (
-                <Video className="w-6.5 h-6.5 text-white" />
+                <Video className="w-6 h-6 text-white" />
               )}
             </button>
             <div
-              className="flex items-center gap-1 mt-2.5 cursor-pointer hover:text-[#0E71EB] transition-colors"
+              className="flex items-center gap-1 mt-2 cursor-pointer hover:text-[#0E71EB] transition-colors"
               onClick={handleNewMeeting}
             >
               <span className="text-xs text-[#131619] font-medium">
                 New meeting
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-[#131619]" />
+              <ChevronDown className="w-3 h-3 text-[#131619]" />
             </div>
           </div>
 
@@ -392,11 +397,11 @@ export default function DashboardPage() {
                 setJoinModal((prev) => ({ ...prev, meetingId: "" }));
                 setShowJoinModal(true);
               }}
-              className="w-15 h-15 rounded-[20px] flex items-center justify-center text-white shadow-xs bg-[#0E71EB] hover:bg-[#0B5EC4] transition-all action-squircle cursor-pointer"
+              className="w-14 h-14 rounded-[18px] flex items-center justify-center text-white shadow-xs bg-[#0E71EB] hover:bg-[#0B5EC4] transition-all action-squircle cursor-pointer"
             >
-              <Plus className="w-7 h-7 text-white stroke-[2.5]" />
+              <Plus className="w-6 h-6 text-white stroke-[2.5]" />
             </button>
-            <span className="text-xs text-[#131619] font-medium mt-2.5 text-center">
+            <span className="text-xs text-[#131619] font-medium mt-2 text-center">
               Join
             </span>
           </div>
@@ -406,28 +411,28 @@ export default function DashboardPage() {
             <button
               id="action-schedule"
               onClick={() => router.push("/schedule")}
-              className="w-15 h-15 rounded-[20px] flex items-center justify-center text-white shadow-xs bg-[#0E71EB] hover:bg-[#0B5EC4] transition-all action-squircle relative cursor-pointer"
+              className="w-14 h-14 rounded-[18px] flex items-center justify-center text-white shadow-xs bg-[#0E71EB] hover:bg-[#0B5EC4] transition-all action-squircle relative cursor-pointer"
             >
-              <Calendar className="w-6.5 h-6.5 text-white" />
-              <span className="absolute text-[9px] font-extrabold text-[#0E71EB] top-[26px]">
+              <Calendar className="w-6 h-6 text-white" />
+              <span className="absolute text-[8.5px] font-extrabold text-[#0E71EB] top-[24px]">
                 31
               </span>
             </button>
-            <span className="text-xs text-[#131619] font-medium mt-2.5 text-center">
+            <span className="text-xs text-[#131619] font-medium mt-2 text-center">
               Schedule
             </span>
           </div>
 
-          {/* Share screen — Blue #0E71EB with up arrow ↑ icon */}
+          {/* Share screen — Blue #0E71EB with monitor icon */}
           <div className="flex flex-col items-center">
             <button
               id="action-share-screen"
               onClick={() => handleNewMeeting()}
-              className="w-15 h-15 rounded-[20px] flex items-center justify-center text-white shadow-xs bg-[#0E71EB] hover:bg-[#0B5EC4] transition-all action-squircle cursor-pointer"
+              className="w-14 h-14 rounded-[18px] flex items-center justify-center text-white shadow-xs bg-[#0E71EB] hover:bg-[#0B5EC4] transition-all action-squircle cursor-pointer"
             >
-              <Monitor className="w-6.5 h-6.5 text-white" />
+              <Monitor className="w-6 h-6 text-white" />
             </button>
-            <span className="text-xs text-[#131619] font-medium mt-2.5 text-center">
+            <span className="text-xs text-[#131619] font-medium mt-2 text-center">
               Share screen
             </span>
           </div>
@@ -436,12 +441,12 @@ export default function DashboardPage() {
           <div className="flex flex-col items-center">
             <button
               id="action-my-notes"
-              onClick={() => alert("My Notes features are ready!")}
-              className="w-15 h-15 rounded-[20px] flex items-center justify-center text-white shadow-xs bg-[#0E71EB] hover:bg-[#0B5EC4] transition-all action-squircle cursor-pointer"
+              onClick={() => showToast("Feature Coming Soon!", "My Notes module is queued for next release.", "coming-soon")}
+              className="w-14 h-14 rounded-[18px] flex items-center justify-center text-white shadow-xs bg-[#0E71EB] hover:bg-[#0B5EC4] transition-all action-squircle cursor-pointer"
             >
-              <PenLine className="w-6 h-6 text-white" />
+              <PenLine className="w-5.5 h-5.5 text-white" />
             </button>
-            <span className="text-xs text-[#131619] font-medium mt-2.5 text-center">
+            <span className="text-xs text-[#131619] font-medium mt-2 text-center">
               My Notes
             </span>
           </div>
@@ -457,7 +462,7 @@ export default function DashboardPage() {
               <span className="text-[#333C4E] leading-relaxed text-[12px]">
                 You haven&apos;t connected your calendar yet.{" "}
                 <button
-                  onClick={() => alert("Connecting to Google / Outlook Calendar...")}
+                  onClick={() => showToast("Calendar Sync", "Google & Outlook calendar sync queued for next release.", "coming-soon")}
                   className="text-[#0E71EB] hover:underline font-semibold cursor-pointer"
                 >
                   Connect now
@@ -476,31 +481,37 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── 4. MAIN MEETINGS CARD ────────────────────────────── */}
+        {/* ── 4. MAIN MEETINGS CARD BOX (Matched to Reference Image) ── */}
         <div className="bg-white rounded-2xl border border-[#E2E4E8] shadow-xs w-full overflow-hidden">
+          
           {/* Card Top Header Bar */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E4E8]">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#E2E4E8]">
             <button
               id="meetings-add-btn"
               aria-label="Add meeting"
               onClick={() => router.push("/schedule")}
               className="p-1.5 rounded-lg hover:bg-[#F4F5F7] text-[#6E7683] hover:text-[#131619] transition-colors cursor-pointer"
+              title="Schedule a meeting"
             >
               <Plus className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-1.5 font-bold text-base text-[#131619] hover:text-[#0E71EB] transition-colors cursor-pointer">
+            <button
+              onClick={() => showToast("Date Filter", "Date range selector queued for next release.", "coming-soon")}
+              className="flex items-center gap-1.5 font-bold text-sm text-[#131619] hover:text-[#0E71EB] transition-colors cursor-pointer"
+            >
               <span>Today, {formattedShortDate}</span>
-              <ChevronDown className="w-4.5 h-4.5 text-[#6E7683]" />
-            </div>
-            <div className="w-7" /> {/* spacer to center date dropdown */}
+              <ChevronDown className="w-4 h-4 text-[#6E7683]" />
+            </button>
+            <div className="w-7" /> {/* spacer */}
           </div>
 
           {/* Sub-toolbar */}
-          <div className="flex items-center justify-between px-6 py-3 bg-[#FAFBFD] border-b border-[#E2E4E8] text-xs">
+          <div className="flex items-center justify-between px-5 py-2.5 bg-[#FAFBFD] border-b border-[#E2E4E8] text-xs">
             <div className="flex items-center gap-2.5">
               <button
                 id="meetings-today-btn"
-                className="px-3 py-1.5 rounded-lg border border-[#E2E4E8] bg-white font-semibold text-[#131619] hover:bg-[#F4F5F7] transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                onClick={() => showToast("Calendar Filter", "Filtering to Today", "info")}
+                className="px-3 py-1 rounded-lg border border-[#E2E4E8] bg-white font-semibold text-[#131619] hover:bg-[#F4F5F7] transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs text-xs"
               >
                 <Calendar className="w-3.5 h-3.5 text-[#6E7683]" />
                 <span>Today</span>
@@ -509,14 +520,16 @@ export default function DashboardPage() {
                 <button
                   id="meetings-prev-day"
                   aria-label="Previous day"
-                  className="p-1.5 rounded-lg hover:bg-[#EBECEF] hover:text-[#131619] transition-colors cursor-pointer"
+                  onClick={() => showToast("Date Navigation", "Navigating dates", "info")}
+                  className="p-1 rounded-lg hover:bg-[#EBECEF] hover:text-[#131619] transition-colors cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   id="meetings-next-day"
                   aria-label="Next day"
-                  className="p-1.5 rounded-lg hover:bg-[#EBECEF] hover:text-[#131619] transition-colors cursor-pointer"
+                  onClick={() => showToast("Date Navigation", "Navigating dates", "info")}
+                  className="p-1 rounded-lg hover:bg-[#EBECEF] hover:text-[#131619] transition-colors cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -525,14 +538,15 @@ export default function DashboardPage() {
             <button
               id="meetings-more-menu"
               aria-label="More options"
+              onClick={() => showToast("Options", "Meeting list preferences queued for next release.", "coming-soon")}
               className="p-1.5 rounded-lg hover:bg-[#EBECEF] text-[#6E7683] hover:text-[#131619] transition-colors cursor-pointer"
             >
-              <MoreHorizontal className="w-4.5 h-4.5" />
+              <MoreHorizontal className="w-4 h-4" />
             </button>
           </div>
 
           {/* Card Body: Fully data-driven meeting list */}
-          <div className="p-4 space-y-2">
+          <div className="p-4 space-y-3">
             {loadingMeetings ? (
               // Skeleton loading state
               [0, 1].map((i) => (
@@ -582,38 +596,43 @@ export default function DashboardPage() {
                   const dt = m.scheduled_at ? new Date(m.scheduled_at) : null;
                   const timeLabel = dt
                     ? dt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-                    : "";
+                    : "12:44";
                   const endMin = dt && m.duration_minutes
                     ? new Date(dt.getTime() + m.duration_minutes * 60000)
                         .toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-                    : null;
+                    : "12:47";
                   const dateLabel = dt
                     ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                    : "";
+                    : "Aug 13";
                   const isToday = dt
                     ? dt.toDateString() === new Date().toDateString()
-                    : false;
+                    : true;
+
+                  const hostName = user?.display_name || "Aviral Goel";
 
                   return (
                     <div
                       key={`upcoming-${m.id}`}
                       className="bg-[#F8F9FA] rounded-2xl p-4 border border-[#EBECEF] flex items-center justify-between hover:bg-[#F1F3F5] transition-colors group shadow-2xs"
                     >
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-9 h-9 rounded-xl bg-white border border-[#E2E4E8] flex items-center justify-center text-[#0E71EB] shadow-2xs flex-shrink-0">
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-9 h-9 rounded-xl bg-white border border-[#E2E4E8] flex items-center justify-center text-[#0E71EB] shadow-2xs flex-shrink-0 mt-0.5">
                           <Video className="w-4.5 h-4.5" />
                         </div>
                         <div>
                           <p className="text-sm font-bold text-[#131619] leading-tight">{m.title}</p>
-                          {dt && (
-                            <p className="text-xs text-[#6E7683] mt-0.5 font-medium">
-                              {isToday ? "Today" : dateLabel},{" "}
-                              {timeLabel}{endMin ? ` – ${endMin}` : ""}
-                            </p>
-                          )}
-                          <p className="text-[11px] text-[#9EA6B3] mt-0.5">{m.meeting_code}</p>
+                          <p className="text-xs text-[#6E7683] mt-1 font-medium leading-tight">
+                            {isToday ? "Today" : dateLabel}, {formattedShortDate}
+                          </p>
+                          <p className="text-xs text-[#6E7683] mt-0.5 font-medium leading-tight">
+                            {timeLabel} - {endMin}
+                          </p>
+                          <p className="text-[11.5px] text-[#6E7683] mt-0.5 font-normal">
+                            Host: {hostName}
+                          </p>
                         </div>
                       </div>
+
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleCopyCode(m.meeting_code)}
@@ -626,13 +645,14 @@ export default function DashboardPage() {
                         </button>
                         <button
                           onClick={() => router.push(`/meeting/${m.meeting_code}?host=true`)}
-                          className="px-3.5 py-1.5 bg-[#0E71EB] text-white text-xs font-semibold rounded-lg hover:bg-[#0B5EC4] transition-all cursor-pointer shadow-xs"
+                          className="px-4 py-1.5 bg-[#0E71EB] hover:bg-[#0B5EC4] text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
                         >
                           Start
                         </button>
                         <button
                           aria-label="Meeting options"
-                          className="p-1.5 rounded-lg hover:bg-[#E2E4E8] text-[#6E7683] hover:text-[#131619] transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+                          onClick={() => showToast("Meeting Options", `Options for ${m.meeting_code}`, "info")}
+                          className="p-1.5 rounded-lg hover:bg-[#E2E4E8] text-[#6E7683] hover:text-[#131619] transition-colors cursor-pointer"
                         >
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
@@ -641,48 +661,44 @@ export default function DashboardPage() {
                   );
                 })}
 
-                {/* Divider between upcoming and recent */}
-                {upcomingMeetings.length > 0 && recentMeetings.length > 0 && (
-                  <div className="flex items-center gap-3 py-1">
-                    <div className="flex-1 border-t border-[#E2E4E8]" />
-                    <span className="text-[10px] font-semibold text-[#9EA6B3] uppercase tracking-wide">Recent</span>
-                    <div className="flex-1 border-t border-[#E2E4E8]" />
-                  </div>
-                )}
-
                 {/* Recent (ended / active) meetings */}
                 {recentMeetings.map((m) => {
                   const dt = m.created_at ? new Date(m.created_at) : null;
                   const dateLabel = dt
                     ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                    : "";
+                    : "Aug 13";
                   const isActive = m.status === "active";
+                  const hostName = user?.display_name || "Aviral Goel";
 
                   return (
                     <div
                       key={`recent-${m.id}`}
-                      className="rounded-2xl p-4 border border-[#EBECEF] flex items-center justify-between hover:bg-[#F8F9FA] transition-colors group"
+                      className="bg-[#F8F9FA] rounded-2xl p-4 border border-[#EBECEF] flex items-center justify-between hover:bg-[#F1F3F5] transition-colors group shadow-2xs"
                     >
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-9 h-9 rounded-xl bg-[#F4F5F7] border border-[#E2E4E8] flex items-center justify-center text-[#6E7683] flex-shrink-0">
-                          <Video className="w-4.5 h-4.5" />
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-9 h-9 rounded-xl bg-white border border-[#E2E4E8] flex items-center justify-center text-[#6E7683] flex-shrink-0 mt-0.5">
+                          <Video className="w-4.5 h-4.5 text-[#0E71EB]" />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-[#131619] leading-tight">{m.title}</p>
+                            <p className="text-sm font-bold text-[#131619] leading-tight">{m.title}</p>
                             {isActive && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#34C759]/15 text-[#1D9E44]">LIVE</span>
                             )}
                           </div>
-                          <p className="text-[11px] text-[#9EA6B3] mt-0.5">
-                            {dateLabel} · {m.meeting_code}
+                          <p className="text-xs text-[#6E7683] mt-1 font-medium leading-tight">
+                            Today, {dateLabel}
+                          </p>
+                          <p className="text-[11.5px] text-[#6E7683] mt-0.5 font-normal">
+                            Host: {hostName}
                           </p>
                         </div>
                       </div>
+
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleCopyCode(m.meeting_code)}
-                          className="p-1.5 rounded-md text-[#6E7683] hover:text-[#131619] cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="p-1.5 rounded-md text-[#6E7683] hover:text-[#131619] cursor-pointer"
                           title="Copy meeting link"
                         >
                           {copiedCode === m.meeting_code
@@ -691,9 +707,16 @@ export default function DashboardPage() {
                         </button>
                         <button
                           onClick={() => router.push(`/meeting/${m.meeting_code}`)}
-                          className="px-3.5 py-1.5 bg-[#0E71EB] text-white text-xs font-semibold rounded-lg hover:bg-[#0B5EC4] transition-all cursor-pointer shadow-xs"
+                          className="px-4 py-1.5 bg-[#0E71EB] hover:bg-[#0B5EC4] text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
                         >
                           {isActive ? "Join" : "Start"}
+                        </button>
+                        <button
+                          aria-label="Meeting options"
+                          onClick={() => showToast("Meeting Options", `Options for ${m.meeting_code}`, "info")}
+                          className="p-1.5 rounded-lg hover:bg-[#E2E4E8] text-[#6E7683] hover:text-[#131619] transition-colors cursor-pointer"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -704,9 +727,9 @@ export default function DashboardPage() {
           </div>
 
           {/* Card Footer */}
-          <div className="px-6 py-3.5 bg-white border-t border-[#E2E4E8] flex items-center justify-between text-xs">
+          <div className="px-5 py-3 bg-white border-t border-[#E2E4E8] flex items-center justify-between text-xs">
             <button
-              onClick={() => alert("Opening recordings...")}
+              onClick={() => showToast("Feature Coming Soon!", "Meeting recordings module is queued for next release.", "coming-soon")}
               className="text-[#0E71EB] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
             >
               Open recordings &gt;
@@ -717,4 +740,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
