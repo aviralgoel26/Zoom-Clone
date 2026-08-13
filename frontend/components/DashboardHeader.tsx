@@ -3,8 +3,7 @@
 /**
  * DashboardHeader.tsx
  * --------------------
- * Authentic Zoom Workplace Top Navigation Bar and Authentication Suite.
- * Auth modal is pixel-matched to the official Zoom Workplace sign-in screen.
+ * Modern Pixel-Perfect Navbar & Auth Modal suite matching Zoom Workplace specifications.
  */
 
 import { useState } from "react";
@@ -33,6 +32,7 @@ import {
   clearSession,
   useAuth,
 } from "@/lib/auth";
+import { useToast } from "@/components/ui/Toast";
 
 // ---------------------------------------------------------------------------
 // SSO Provider Icon components
@@ -79,13 +79,14 @@ function MicrosoftIcon() {
       <path fill="#F25022" d="M1 1h10v10H1z"/>
       <path fill="#00A4EF" d="M13 1h10v10H13z"/>
       <path fill="#7FBA00" d="M1 13h10v10H1z"/>
-      <path fill="#FFB900" d="M13 13h10v10H13z"/>
+      <path fill="#FFB900" d="M13 13h10v10H1z"/>
     </svg>
   );
 }
 
 export default function DashboardHeader() {
   const { user: currentUser, loading: isLoadingAuth } = useAuth();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
 
   // Presence status
@@ -96,7 +97,6 @@ export default function DashboardHeader() {
   // Auth modal state
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  // signin is 2-step: email → password
   const [signinStep, setSigninStep] = useState<"email" | "password">("email");
 
   // Form fields
@@ -137,9 +137,9 @@ export default function DashboardHeader() {
   const handleSignOut = () => {
     clearSession();
     setShowProfileMenu(false);
+    showToast("Signed Out", "You have successfully signed out.", "info");
   };
 
-  // Sign-in: Step 1 = email Next, Step 2 = password Sign In
   const handleSigninNext = (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput.trim()) { setAuthError("Please enter your email"); return; }
@@ -165,6 +165,7 @@ export default function DashboardHeader() {
       }
       saveSession(response.access_token, response.user);
       closeModal();
+      showToast("Welcome!", `Signed in as ${response.user.display_name}`, "success");
     } catch (err: unknown) {
       setAuthError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -172,73 +173,107 @@ export default function DashboardHeader() {
     }
   };
 
+  const handleSSOClick = (provider: string) => {
+    showToast("Feature Coming Soon!", `${provider} authentication is queued for next release.`, "coming-soon");
+  };
+
   return (
     <>
-      {/* ── Top Header Bar ────────────────────────────────────── */}
+      {/* ── Top Header Bar (Exact Specs Refactored) ───────────────────── */}
       <header
         id="dashboard-header"
-        className="fixed top-0 right-0 z-40 flex items-center justify-between px-6 bg-white border-b border-[#E2E4E8] select-none"
-        style={{ left: "64px", height: "56px" }}
+        className="fixed top-0 left-16 right-0 z-40 h-14 px-5 bg-white border-b border-[#E2E4E8] flex items-center justify-between select-none"
       >
-        {/* Logo */}
+        {/* ── LEFT SECTION (BRAND & HISTORY NAVIGATION) ─────────────── */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="text-lg font-extrabold text-[#0E71EB] tracking-tight">zoom</span>
-          <span className="text-sm font-semibold text-[#131619] tracking-tight">Workplace</span>
-        </div>
+          <span className="text-[#0E71EB] text-xl font-bold tracking-tight">zoom</span>
+          <span className="text-[#232333] text-sm font-normal ml-1.5">Workplace</span>
 
-        {/* Search */}
-        <div className="flex items-center gap-3 flex-1 max-w-xl mx-8 justify-center">
-          <div className="flex items-center gap-1 flex-shrink-0 text-[#6E7683]">
-            <button onClick={() => window.history.back()} className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors" aria-label="Back">
+          {/* History Nav Controls */}
+          <div className="flex items-center gap-1.5 text-gray-500 ml-4">
+            <button
+              onClick={() => window.history.back()}
+              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
+              aria-label="Back"
+            >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button onClick={() => window.history.forward()} className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors" aria-label="Forward">
+            <button
+              onClick={() => window.history.forward()}
+              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
+              aria-label="Forward"
+            >
               <ChevronRight className="w-4 h-4" />
             </button>
-            <button onClick={() => window.location.reload()} className="p-1.5 rounded-lg hover:bg-[#F4F5F7] hover:text-[#131619] transition-colors" aria-label="Reload">
+            <button
+              onClick={() => window.location.reload()}
+              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
+              aria-label="Reload"
+            >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="flex items-center w-full max-w-md bg-[#EBECEF] rounded-full px-3.5 py-1.5 gap-2.5 border border-transparent focus-within:border-[#0E71EB] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0E71EB]/20 transition-all">
-            <Search className="w-4 h-4 text-[#6E7683] flex-shrink-0" />
+        </div>
+
+        {/* ── CENTER SECTION (SEARCH BAR & QUICK ADD) ────────────────── */}
+        <div className="relative flex-1 max-w-md mx-auto flex items-center gap-2">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               id="dashboard-search"
               type="text"
               placeholder="Search (Ctrl+E)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent text-xs text-[#131619] placeholder-[#6E7683] focus:outline-none border-none p-0"
+              className="w-full h-8 pl-9 pr-4 bg-[#F0F1F4] hover:bg-[#E6E8EC] focus:bg-white focus:ring-2 focus:ring-[#0E71EB]/40 focus:outline-none rounded-full text-xs text-gray-800 placeholder-gray-500 transition-all"
             />
           </div>
-          <button className="p-1.5 rounded-lg hover:bg-[#F4F5F7] text-[#6E7683] hover:text-[#131619] transition-colors flex-shrink-0" aria-label="New">
+          <button
+            onClick={() => showToast("Feature Coming Soon!", "Quick add module is queued for next release.", "coming-soon")}
+            className="p-1.5 rounded-full bg-[#F0F1F4] hover:bg-[#E6E8EC] text-gray-600 text-sm font-semibold transition-colors flex items-center justify-center h-8 w-8 flex-shrink-0 cursor-pointer"
+            aria-label="Quick Add"
+          >
             <Plus className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-3.5 flex-shrink-0">
-          <button className="bg-[#0E71EB] hover:bg-[#0B5EC4] text-white rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs">
+        {/* ── RIGHT SECTION (ACTIONS & AUTH BUTTONS) ────────────────── */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={() => showToast("Upgrade Account", "You are already on the highest tier demo account.", "info")}
+            className="px-3.5 py-1 text-xs font-semibold text-white bg-[#0E71EB] hover:bg-[#0B5CBE] rounded-full transition-all shadow-sm whitespace-nowrap flex items-center justify-center h-7 cursor-pointer"
+          >
             Upgrade
           </button>
-          <button className="relative p-2 rounded-full hover:bg-[#F4F5F7] text-[#6E7683] transition-colors" aria-label="Notifications">
+
+          <button
+            onClick={() => showToast("Notifications", "You have no new notifications.", "info")}
+            className="relative p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
+            aria-label="Notifications"
+          >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#FF3B30] border-2 border-white" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
           </button>
-          <button className="p-2 rounded-full hover:bg-[#F4F5F7] text-[#6E7683] transition-colors" aria-label="Calendar">
+
+          <button
+            onClick={() => showToast("Calendar", "Calendar sync is active.", "info")}
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
+            aria-label="Calendar"
+          >
             <Calendar className="w-4 h-4" />
           </button>
 
-          {/* Profile or Auth Buttons */}
+          {/* Profile or Auth Buttons (NO TEXT CLIPPING) */}
           {isLoadingAuth ? (
-            <div className="w-8 h-8 rounded-full bg-[#EBECEF] animate-pulse" />
+            <div className="w-7 h-7 rounded-full bg-gray-200 animate-pulse" />
           ) : currentUser ? (
-            <div className="relative ml-1">
+            <div className="relative">
               <button
                 id="header-profile-btn"
                 onClick={() => setShowProfileMenu((v) => !v)}
                 className="relative flex items-center justify-center cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-full bg-[#0E71EB] flex items-center justify-center text-white text-xs font-bold">
+                <div className="w-7 h-7 rounded-full bg-[#0E71EB] flex items-center justify-center text-white text-xs font-bold">
                   {initials}
                 </div>
                 <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ${statusColors[userStatus]} border-2 border-white`} />
@@ -268,7 +303,9 @@ export default function DashboardHeader() {
                       {showStatusMenu && (
                         <div className="absolute left-0 right-0 mt-1 bg-white border border-[#E2E4E8] rounded-xl shadow-lg py-1 z-50">
                           {(["Available", "Away", "Do Not Disturb"] as const).map((s) => (
-                            <button key={s} onClick={() => { setUserStatus(s); setShowStatusMenu(false); }}
+                            <button
+                              key={s}
+                              onClick={() => { setUserStatus(s); setShowStatusMenu(false); }}
                               className="w-full px-3 py-2 text-left text-xs hover:bg-[#F4F5F7] flex items-center gap-2 cursor-pointer"
                             >
                               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColors[s]}`} />
@@ -297,37 +334,42 @@ export default function DashboardHeader() {
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 ml-1">
-              <button id="header-signin-btn" onClick={() => openModal("signin")}
-                className="px-4 py-1.5 border border-[#0E71EB] text-[#0E71EB] hover:bg-[#EEF5FE] text-xs font-semibold rounded-full transition-all cursor-pointer"
-              >Sign In</button>
-              <button id="header-signup-btn" onClick={() => openModal("signup")}
-                className="px-4 py-1.5 bg-[#0E71EB] hover:bg-[#0B5EC4] text-white text-xs font-semibold rounded-full transition-all cursor-pointer shadow-sm"
-              >Sign Up Free</button>
+            <div className="flex items-center gap-2">
+              <button
+                id="header-signin-btn"
+                onClick={() => openModal("signin")}
+                className="px-3.5 py-1 text-xs font-semibold text-[#0E71EB] border border-[#0E71EB] hover:bg-[#0E71EB]/10 rounded-full transition-all whitespace-nowrap flex items-center justify-center h-7 cursor-pointer"
+              >
+                Sign In
+              </button>
+              <button
+                id="header-signup-btn"
+                onClick={() => openModal("signup")}
+                className="px-3.5 py-1 text-xs font-semibold text-white bg-[#0E71EB] hover:bg-[#0B5CBE] rounded-full transition-all shadow-sm whitespace-nowrap flex items-center justify-center h-7 cursor-pointer"
+              >
+                Sign Up Free
+              </button>
             </div>
           )}
         </div>
       </header>
 
-      {/* ── Auth Modal — pixel-matched to Zoom Workplace ──────── */}
+      {/* ── Auth Modal — Zoom Workplace Style ───────────────────────── */}
       {showAuthModal && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
           <div className="w-[360px] bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-
-            {/* ── Modal Top: Zoom Branding ── */}
+            {/* Modal Top */}
             <div className="pt-9 pb-5 px-8 text-center relative border-b border-[#F0F0F0]">
               <button
                 onClick={closeModal}
-                className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-[#F4F5F7] text-[#8E95A2] hover:text-[#131619] transition-colors"
+                className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-[#F4F5F7] text-[#8E95A2] hover:text-[#131619] transition-colors cursor-pointer"
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
-
-              {/* Zoom logo exactly matching the desktop app */}
               <div className="flex items-center justify-center gap-2 mb-1">
                 <span className="text-3xl font-extrabold text-[#0E71EB] tracking-tight">zoom</span>
                 <ChevronDown className="w-4 h-4 text-[#6E7683] mt-1" />
@@ -340,101 +382,88 @@ export default function DashboardHeader() {
               )}
             </div>
 
-            {/* ── Form Body ── */}
+            {/* Form Body */}
             <div className="px-8 py-6">
-
-              {/* SIGN IN FLOW */}
-              {authMode === "signin" && (
-                <>
-                  {signinStep === "email" ? (
-                    <form onSubmit={handleSigninNext} className="space-y-3">
-                      <button
-                        type="button"
-                        onClick={() => { setSigninStep("email"); }}
-                        className="flex items-center gap-1.5 text-[#0E71EB] text-sm font-medium mb-4 hover:underline cursor-pointer"
-                      >
-                        <ChevronLeft className="w-4 h-4" /> Back
-                      </button>
-
+              {authMode === "signin" ? (
+                signinStep === "email" ? (
+                  <form onSubmit={handleSigninNext} className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setSigninStep("email")}
+                      className="flex items-center gap-1.5 text-[#0E71EB] text-sm font-medium mb-4 hover:underline cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Back
+                    </button>
+                    <input
+                      id="auth-email"
+                      type="email"
+                      required
+                      placeholder="Email or phone number"
+                      value={emailInput}
+                      onChange={(e) => { setEmailInput(e.target.value); setAuthError(""); }}
+                      autoComplete="email"
+                      autoFocus
+                      className="w-full px-4 py-3 text-sm rounded-xl border border-[#D0D5DD] hover:border-[#0E71EB] focus:border-[#0E71EB] focus:ring-3 focus:ring-[#0E71EB]/15 outline-none bg-white text-[#131619] transition placeholder-[#9EA6B3]"
+                    />
+                    {authError && (
+                      <p className="text-xs text-[#CC0000] font-medium px-1">{authError}</p>
+                    )}
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-[#0E71EB] hover:bg-[#0B5CBE] text-white text-sm font-semibold rounded-xl transition-all cursor-pointer shadow-sm"
+                    >
+                      Next
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleAuthSubmit} className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => { setSigninStep("email"); setAuthError(""); }}
+                      className="flex items-center gap-1.5 text-[#0E71EB] text-sm font-medium mb-1 hover:underline cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Back
+                    </button>
+                    <p className="text-xs text-[#6E7683] mb-3 truncate">Signing in as <span className="font-semibold text-[#131619]">{emailInput}</span></p>
+                    <div className="relative flex items-center">
                       <input
-                        id="auth-email"
-                        type="email"
+                        id="auth-password"
+                        type={showPassword ? "text" : "password"}
                         required
-                        placeholder="Email or phone number"
-                        value={emailInput}
-                        onChange={(e) => { setEmailInput(e.target.value); setAuthError(""); }}
-                        autoComplete="email"
+                        placeholder="Password"
+                        value={passwordInput}
+                        onChange={(e) => { setPasswordInput(e.target.value); setAuthError(""); }}
+                        autoComplete="current-password"
                         autoFocus
-                        className="w-full px-4 py-3 text-sm rounded-xl border border-[#D0D5DD] hover:border-[#0E71EB] focus:border-[#0E71EB] focus:ring-3 focus:ring-[#0E71EB]/15 outline-none bg-white text-[#131619] transition placeholder-[#9EA6B3]"
+                        className="w-full pl-4 pr-11 py-3 text-sm rounded-xl border border-[#D0D5DD] hover:border-[#0E71EB] focus:border-[#0E71EB] focus:ring-3 focus:ring-[#0E71EB]/15 outline-none bg-white text-[#131619] transition placeholder-[#9EA6B3]"
                       />
-
-                      {authError && (
-                        <p className="text-xs text-[#CC0000] font-medium px-1">{authError}</p>
-                      )}
-
-                      <button
-                        type="submit"
-                        className="w-full py-3 bg-[#D0D5DD] hover:bg-[#0E71EB] text-[#6E7683] hover:text-white text-sm font-semibold rounded-xl transition-all cursor-pointer"
-                      >
-                        Next
-                      </button>
-                    </form>
-                  ) : (
-                    <form onSubmit={handleAuthSubmit} className="space-y-3">
                       <button
                         type="button"
-                        onClick={() => { setSigninStep("email"); setAuthError(""); }}
-                        className="flex items-center gap-1.5 text-[#0E71EB] text-sm font-medium mb-1 hover:underline cursor-pointer"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-3.5 text-[#8E95A2] hover:text-[#555] transition-colors"
                       >
-                        <ChevronLeft className="w-4 h-4" /> Back
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
-                      <p className="text-xs text-[#6E7683] mb-3 truncate">Signing in as <span className="font-semibold text-[#131619]">{emailInput}</span></p>
-
-                      <div className="relative flex items-center">
-                        <input
-                          id="auth-password"
-                          type={showPassword ? "text" : "password"}
-                          required
-                          placeholder="Password"
-                          value={passwordInput}
-                          onChange={(e) => { setPasswordInput(e.target.value); setAuthError(""); }}
-                          autoComplete="current-password"
-                          autoFocus
-                          className="w-full pl-4 pr-11 py-3 text-sm rounded-xl border border-[#D0D5DD] hover:border-[#0E71EB] focus:border-[#0E71EB] focus:ring-3 focus:ring-[#0E71EB]/15 outline-none bg-white text-[#131619] transition placeholder-[#9EA6B3]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((v) => !v)}
-                          className="absolute right-3.5 text-[#8E95A2] hover:text-[#555] transition-colors"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-
-                      {authError && (
-                        <p className="text-xs text-[#CC0000] font-medium px-1">{authError}</p>
-                      )}
-
-                      <button
-                        id="auth-submit-btn"
-                        type="submit"
-                        disabled={authLoading}
-                        className="w-full py-3 bg-[#0E71EB] hover:bg-[#0B5EC4] disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        {authLoading ? (
-                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : "Sign In"}
-                      </button>
-                    </form>
-                  )}
-                </>
-              )}
-
-              {/* SIGN UP FLOW */}
-              {authMode === "signup" && (
+                    </div>
+                    {authError && (
+                      <p className="text-xs text-[#CC0000] font-medium px-1">{authError}</p>
+                    )}
+                    <button
+                      id="auth-submit-btn"
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full py-3 bg-[#0E71EB] hover:bg-[#0B5EC4] disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      {authLoading ? (
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : "Sign In"}
+                    </button>
+                  </form>
+                )
+              ) : (
                 <form onSubmit={handleAuthSubmit} className="space-y-3">
                   <input
                     id="auth-display-name"
@@ -471,16 +500,14 @@ export default function DashboardHeader() {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-
                   {authError && (
                     <p className="text-xs text-[#CC0000] font-medium px-1">{authError}</p>
                   )}
-
                   <button
                     id="auth-submit-btn"
                     type="submit"
                     disabled={authLoading}
-                    className="w-full py-3 bg-[#0E71EB] hover:bg-[#0B5EC4] disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-[#0E71EB] hover:bg-[#0B5EC4] disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm"
                   >
                     {authLoading ? (
                       <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
@@ -492,7 +519,7 @@ export default function DashboardHeader() {
                 </form>
               )}
 
-              {/* ── SSO Row & Social Providers ── */}
+              {/* SSO Row */}
               <div className="relative my-5 flex items-center">
                 <div className="flex-1 border-t border-[#E2E4E8]" />
                 <span className="mx-3 text-[11px] font-semibold text-[#9EA6B3] uppercase tracking-wide">or sign in with</span>
@@ -501,16 +528,16 @@ export default function DashboardHeader() {
 
               <div className="grid grid-cols-5 gap-2">
                 {[
-                  { label: "SSO", icon: <SSOIcon />, onClick: () => alert("SSO requires enterprise configuration") },
-                  { label: "Google", icon: <GoogleIcon />, onClick: () => alert("Google OAuth requires client ID setup") },
-                  { label: "Apple", icon: <AppleIcon />, onClick: () => alert("Apple Sign-In requires Apple Developer setup") },
-                  { label: "Facebook", icon: <FacebookIcon />, onClick: () => alert("Facebook Login requires App ID setup") },
-                  { label: "Microsoft", icon: <MicrosoftIcon />, onClick: () => alert("Microsoft OAuth requires Azure App setup") },
-                ].map(({ label, icon, onClick }) => (
+                  { label: "SSO", icon: <SSOIcon /> },
+                  { label: "Google", icon: <GoogleIcon /> },
+                  { label: "Apple", icon: <AppleIcon /> },
+                  { label: "Facebook", icon: <FacebookIcon /> },
+                  { label: "Microsoft", icon: <MicrosoftIcon /> },
+                ].map(({ label, icon }) => (
                   <button
                     key={label}
                     type="button"
-                    onClick={onClick}
+                    onClick={() => handleSSOClick(label)}
                     className="flex flex-col items-center gap-1.5 cursor-pointer group"
                   >
                     <div className="w-12 h-12 rounded-2xl border border-[#E2E4E8] flex items-center justify-center group-hover:border-[#0E71EB]/40 group-hover:bg-[#EEF5FE] transition-all shadow-xs">
@@ -521,7 +548,7 @@ export default function DashboardHeader() {
                 ))}
               </div>
 
-              {/* ── Footer Links ── */}
+              {/* Footer Links */}
               <div className="mt-6 space-y-2 text-center">
                 {authMode === "signin" ? (
                   <p className="text-xs text-[#6E7683]">
@@ -541,12 +568,12 @@ export default function DashboardHeader() {
                 <p className="text-xs text-[#6E7683] flex items-center justify-center gap-1.5">
                   <MessageCircle className="w-3.5 h-3.5" />
                   Need help?{" "}
-                  <button className="text-[#0E71EB] font-semibold hover:underline cursor-pointer">Chat with us</button>
+                  <button onClick={() => showToast("Help & Support", "Support chat is queued for next release.", "info")} className="text-[#0E71EB] font-semibold hover:underline cursor-pointer">Chat with us</button>
                 </p>
               </div>
             </div>
 
-            {/* ── Modal Footer — Terms ── */}
+            {/* Modal Footer */}
             <div className="border-t border-[#F0F0F0] py-3 px-8 flex items-center justify-center gap-4">
               <button className="text-[11px] text-[#8E95A2] hover:text-[#0E71EB] transition-colors cursor-pointer">Terms</button>
               <button className="text-[11px] text-[#8E95A2] hover:text-[#0E71EB] transition-colors cursor-pointer">Privacy</button>
