@@ -13,10 +13,20 @@ const RAW_BASE_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 ).replace(/\/$/, "");
 
+const ensureProtocol = (url: string): string => {
+  if (!url) return "http://localhost:8000";
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  return `https://${url}`;
+};
+
 // If NEXT_PUBLIC_API_URL contains trailing /api, strip it so /api/meetings paths don't duplicate
-const BASE_URL = RAW_BASE_URL.endsWith("/api")
+const SANITIZED_URL = RAW_BASE_URL.endsWith("/api")
   ? RAW_BASE_URL.slice(0, -4)
   : RAW_BASE_URL;
+
+const BASE_URL = ensureProtocol(SANITIZED_URL);
 
 // ---------------------------------------------------------------------------
 // Types (mirroring backend Pydantic schemas)
