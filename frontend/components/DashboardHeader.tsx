@@ -302,11 +302,11 @@ export default function DashboardHeader() {
             <form onSubmit={handleAuthSubmit} className="px-6 py-5 space-y-4">
               {authMode === "signup" && (
                 <div>
-                  <label className="block text-xs font-medium text-[#6E7683] mb-1.5">
+                  <label className="block text-xs font-semibold text-[#6E7683] mb-1.5">
                     Display Name
                   </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9EA6B3]" />
+                  <div className="relative flex items-center">
+                    <User className="absolute left-3.5 w-4 h-4 text-[#8E95A2] pointer-events-none z-10" />
                     <input
                       id="auth-display-name"
                       type="text"
@@ -315,18 +315,18 @@ export default function DashboardHeader() {
                       value={displayNameInput}
                       onChange={(e) => setDisplayNameInput(e.target.value)}
                       autoComplete="name"
-                      className="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl border border-[#C8CBD0] focus:border-[#0E71EB] focus:ring-2 focus:ring-[#0E71EB]/15 outline-none bg-white text-[#131619] transition"
+                      className="w-full pl-10 pr-3 py-2.5 text-sm rounded-xl border border-[#C8CBD0] focus:border-[#0E71EB] focus:ring-2 focus:ring-[#0E71EB]/20 outline-none bg-white text-[#131619] transition placeholder-[#9EA6B3]"
                     />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-medium text-[#6E7683] mb-1.5">
+                <label className="block text-xs font-semibold text-[#6E7683] mb-1.5">
                   Email Address
                 </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9EA6B3]" />
+                <div className="relative flex items-center">
+                  <Mail className="absolute left-3.5 w-4 h-4 text-[#8E95A2] pointer-events-none z-10" />
                   <input
                     id="auth-email"
                     type="email"
@@ -335,17 +335,17 @@ export default function DashboardHeader() {
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
                     autoComplete="email"
-                    className="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl border border-[#C8CBD0] focus:border-[#0E71EB] focus:ring-2 focus:ring-[#0E71EB]/15 outline-none bg-white text-[#131619] transition"
+                    className="w-full pl-10 pr-3 py-2.5 text-sm rounded-xl border border-[#C8CBD0] focus:border-[#0E71EB] focus:ring-2 focus:ring-[#0E71EB]/20 outline-none bg-white text-[#131619] transition placeholder-[#9EA6B3]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-[#6E7683] mb-1.5">
+                <label className="block text-xs font-semibold text-[#6E7683] mb-1.5">
                   Password
                 </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9EA6B3]" />
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3.5 w-4 h-4 text-[#8E95A2] pointer-events-none z-10" />
                   <input
                     id="auth-password"
                     type={showPassword ? "text" : "password"}
@@ -354,12 +354,12 @@ export default function DashboardHeader() {
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
                     autoComplete={authMode === "signin" ? "current-password" : "new-password"}
-                    className="w-full pl-9 pr-10 py-2.5 text-sm rounded-xl border border-[#C8CBD0] focus:border-[#0E71EB] focus:ring-2 focus:ring-[#0E71EB]/15 outline-none bg-white text-[#131619] transition"
+                    className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-[#C8CBD0] focus:border-[#0E71EB] focus:ring-2 focus:ring-[#0E71EB]/20 outline-none bg-white text-[#131619] transition placeholder-[#9EA6B3]"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9EA6B3] hover:text-[#6E7683] transition-colors"
+                    className="absolute right-3 text-[#8E95A2] hover:text-[#555] transition-colors p-1"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -368,8 +368,9 @@ export default function DashboardHeader() {
               </div>
 
               {authError && (
-                <div className="bg-[#FFF0F0] border border-[#FFD0D0] text-[#CC0000] text-xs rounded-xl px-3 py-2.5 font-medium">
-                  {authError}
+                <div className="bg-[#FFF0F0] border border-[#FFD0D0] text-[#CC0000] text-xs rounded-xl px-3.5 py-2.5 font-medium flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#CC0000] flex-shrink-0" />
+                  <span>{authError}</span>
                 </div>
               )}
 
@@ -377,7 +378,7 @@ export default function DashboardHeader() {
                 id="auth-submit-btn"
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-2.5 bg-[#0E71EB] hover:bg-[#0B5EC4] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-all cursor-pointer mt-1 flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[#0E71EB] hover:bg-[#0B5EC4] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-all cursor-pointer mt-1 flex items-center justify-center gap-2 shadow-xs"
               >
                 {authLoading ? (
                   <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
