@@ -148,6 +148,8 @@ export function useWebRTC({
     `peer-${Math.random().toString(36).substring(2, 9)}`
   );
   const isConnectingRef = useRef(false);
+  // Queue ICE candidates that arrive before setRemoteDescription is complete
+  const pendingIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
   useEffect(() => {
     roleRef.current = role;
@@ -408,6 +410,13 @@ export function useWebRTC({
             )
           );
 
+          // Flush any ICE candidates that arrived before remote description
+          const queued = pendingIceCandidatesRef.current.get(remotePeerId) || [];
+          for (const c of queued) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+          }
+          pendingIceCandidatesRef.current.delete(remotePeerId);
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
 
@@ -437,6 +446,12 @@ export function useWebRTC({
                 message.sdp as RTCSessionDescriptionInit
               )
             );
+            // Flush any ICE candidates that arrived before remote description
+            const queued = pendingIceCandidatesRef.current.get(remotePeerId) || [];
+            for (const c of queued) {
+              try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+            }
+            pendingIceCandidatesRef.current.delete(remotePeerId);
           }
 
         } else if (type === "name-update") {
@@ -451,16 +466,26 @@ export function useWebRTC({
         } else if (type === "ice-candidate") {
           // Trickle ICE: add remote candidate to the correct peer connection.
           const remotePeerId = message.fromPeerId as string;
+          if (!remotePeerId || remotePeerId === myPeerIdRef.current) return;
           const pc = peerConnectionsRef.current.get(remotePeerId);
           if (pc && message.candidate) {
-            try {
-              await pc.addIceCandidate(
-                new RTCIceCandidate(
-                  message.candidate as RTCIceCandidateInit
-                )
-              );
-            } catch (e) {
-              console.warn("[WebRTC] addIceCandidate error:", e);
+            if (pc.remoteDescription) {
+              // Remote description is already set — apply immediately
+              try {
+                await pc.addIceCandidate(
+                  new RTCIceCandidate(
+                    message.candidate as RTCIceCandidateInit
+                  )
+                );
+              } catch (e) {
+                console.warn("[WebRTC] addIceCandidate error:", e);
+              }
+            } else {
+              // Queue the candidate until remote description is set
+              const queue = pendingIceCandidatesRef.current.get(remotePeerId) || [];
+              queue.push(message.candidate as RTCIceCandidateInit);
+              pendingIceCandidatesRef.current.set(remotePeerId, queue);
+              console.log(`[WebRTC] Queued ICE candidate for ${remotePeerId} (no remoteDescription yet)`);
             }
           }
 

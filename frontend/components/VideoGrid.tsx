@@ -185,6 +185,10 @@ export default function VideoGrid({
       ? "grid-cols-2"
       : "grid-cols-3";
 
+  // For 3 participants: first tile spans full width (1-on-top + 2-on-bottom)
+  const getTileColSpan = (index: number) =>
+    totalParticipants === 3 && index === 0 ? "col-span-2" : "";
+
   const localReaction = reactions.find(
     (r) => r.peerId === localPeerId || (!localPeerId && r.sender === localDisplayName)
   );
@@ -262,19 +266,21 @@ export default function VideoGrid({
       {/* ── GRID VIEW ────────────────────────────────────────── */}
       {viewMode === "grid" && (
         <div
-          className={`grid ${gridCols} gap-3 p-4 h-full overflow-y-auto auto-rows-fr`}
+          className={`grid ${gridCols} gap-3 p-4 h-full content-center`}
+          style={{ gridAutoRows: "1fr" }}
         >
-          {allPeers.map((p) => (
-            <VideoTile
-              key={p.id}
-              stream={p.stream}
-              displayName={p.displayName}
-              isMuted={p.isMuted}
-              isVideoOff={p.isVideoOff}
-              isLocal={p.isLocal}
-              isHost={p.isHost}
-              reactionEmoji={p.reaction}
-            />
+          {allPeers.map((p, idx) => (
+            <div key={p.id} className={`${getTileColSpan(idx)} min-h-0`}>
+              <VideoTile
+                stream={p.stream}
+                displayName={p.displayName}
+                isMuted={p.isMuted}
+                isVideoOff={p.isVideoOff}
+                isLocal={p.isLocal}
+                isHost={p.isHost}
+                reactionEmoji={p.reaction}
+              />
+            </div>
           ))}
         </div>
       )}
