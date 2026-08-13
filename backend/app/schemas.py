@@ -109,6 +109,18 @@ class MeetingValidationResponse(BaseModel):
     meeting_code: Optional[str] = None
 
 
+class NotificationSchema(BaseModel):
+    """Notification item for upcoming meeting reminders."""
+    id: str
+    meeting_id: int
+    meeting_code: str
+    title: str
+    scheduled_at: Optional[datetime] = None
+    message: str
+    time_until: str
+    urgency: str  # "imminent" | "soon" | "upcoming"
+
+
 # ---------------------------------------------------------------------------
 # Auth schemas
 # ---------------------------------------------------------------------------

@@ -3,18 +3,15 @@
 /**
  * DashboardHeader.tsx
  * --------------------
- * Modern Pixel-Perfect Navbar & Auth Modal suite matching Zoom Workplace specifications.
+ * Modern Navbar, Notification Service & Auth Suite matching Zoom Workplace specifications.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search,
   Bell,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
-  RotateCcw,
-  Plus,
   LogOut,
   User,
   Settings,
@@ -22,8 +19,12 @@ import {
   Eye,
   EyeOff,
   ChevronDown,
+  ChevronLeft,
   CheckCircle2,
   MessageCircle,
+  Video,
+  Clock,
+  Check,
 } from "lucide-react";
 import {
   login,
@@ -33,6 +34,7 @@ import {
   useAuth,
 } from "@/lib/auth";
 import { useToast } from "@/components/ui/Toast";
+import { getMeetingNotifications, NotificationItem } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // SSO Provider Icon components
@@ -79,12 +81,13 @@ function MicrosoftIcon() {
       <path fill="#F25022" d="M1 1h10v10H1z"/>
       <path fill="#00A4EF" d="M13 1h10v10H13z"/>
       <path fill="#7FBA00" d="M1 13h10v10H1z"/>
-      <path fill="#FFB900" d="M13 13h10v10H1z"/>
+      <path fill="#FFB900" d="M13 13h10v10H13z"/>
     </svg>
   );
 }
 
 export default function DashboardHeader() {
+  const router = useRouter();
   const { user: currentUser, loading: isLoadingAuth } = useAuth();
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
@@ -93,6 +96,14 @@ export default function DashboardHeader() {
   const [userStatus, setUserStatus] = useState<"Available" | "Away" | "Do Not Disturb">("Available");
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // Notifications Service State
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [showNotifDrawer, setShowNotifDrawer] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const notifBtnRef = useRef<HTMLButtonElement>(null);
+  const lastAlertedNotifRef = useRef<Set<string>>(new Set());
 
   // Auth modal state
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -116,6 +127,51 @@ export default function DashboardHeader() {
     Away: "bg-[#FF9500]",
     "Do Not Disturb": "bg-[#FF3B30]",
   };
+
+  // ---------------------------------------------------------------------------
+  // Notification Service Polling & Reminders
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      const list = await getMeetingNotifications(currentUser?.id);
+      setNotifications(list);
+      setUnreadNotifCount(list.length);
+
+      // Trigger automatic toast reminders for imminent meetings
+      list.forEach((n) => {
+        if ((n.urgency === "imminent" || n.urgency === "soon") && !lastAlertedNotifRef.current.has(n.id)) {
+          lastAlertedNotifRef.current.add(n.id);
+          showToast(
+            `⏰ Meeting Reminder: ${n.title}`,
+            `${n.message} (ID: ${n.meeting_code})`,
+            "warning"
+          );
+        }
+      });
+    };
+
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 25000); // Check every 25 seconds
+    return () => clearInterval(interval);
+  }, [currentUser?.id, showToast]);
+
+  // Click outside to close notification drawer
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        notifRef.current &&
+        !notifRef.current.contains(e.target as Node) &&
+        notifBtnRef.current &&
+        !notifBtnRef.current.contains(e.target as Node)
+      ) {
+        setShowNotifDrawer(false);
+      }
+    };
+    if (showNotifDrawer) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showNotifDrawer]);
 
   const openModal = (mode: "signin" | "signup") => {
     setAuthMode(mode);
@@ -179,65 +235,35 @@ export default function DashboardHeader() {
 
   return (
     <>
-      {/* ── Top Header Bar (Exact Specs Refactored) ───────────────────── */}
+      {/* ── Top Header Bar ──────────────────────────────────────────────── */}
       <header
         id="dashboard-header"
         className="fixed top-0 left-16 right-0 z-40 h-14 px-5 bg-white border-b border-[#E2E4E8] flex items-center justify-between select-none"
       >
-        {/* ── LEFT SECTION (BRAND & HISTORY NAVIGATION) ─────────────── */}
+        {/* ── LEFT SECTION (BRAND ONLY — HISTORY BUTTONS REMOVED AS REQUESTED) ── */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className="text-[#0E71EB] text-xl font-bold tracking-tight">zoom</span>
           <span className="text-[#232333] text-sm font-normal ml-1.5">Workplace</span>
-
-          {/* History Nav Controls */}
-          <div className="flex items-center gap-1.5 text-gray-500 ml-4">
-            <button
-              onClick={() => window.history.back()}
-              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
-              aria-label="Back"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => window.history.forward()}
-              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
-              aria-label="Forward"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
-              aria-label="Reload"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
 
-        {/* ── CENTER SECTION (SEARCH BAR & QUICK ADD) ────────────────── */}
-        <div className="relative flex-1 max-w-md mx-auto flex items-center gap-2">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        {/* ── CENTER SECTION (SEARCH BAR ONLY — BUG FIXED & + BUTTON REMOVED) ──── */}
+        <div className="relative flex-1 max-w-md mx-auto flex items-center">
+          <div className="relative w-full flex items-center">
+            {/* Search Icon — absolute positioned & non-overlapping */}
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
             <input
               id="dashboard-search"
               type="text"
               placeholder="Search (Ctrl+E)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-8 pl-9 pr-4 bg-[#F0F1F4] hover:bg-[#E6E8EC] focus:bg-white focus:ring-2 focus:ring-[#0E71EB]/40 focus:outline-none rounded-full text-xs text-gray-800 placeholder-gray-500 transition-all"
+              style={{ paddingLeft: "38px" }}
+              className="w-full h-8 pr-4 bg-[#F0F1F4] hover:bg-[#E6E8EC] focus:bg-white focus:ring-2 focus:ring-[#0E71EB]/40 focus:outline-none rounded-full text-xs text-gray-800 placeholder-gray-500 transition-all"
             />
           </div>
-          <button
-            onClick={() => showToast("Feature Coming Soon!", "Quick add module is queued for next release.", "coming-soon")}
-            className="p-1.5 rounded-full bg-[#F0F1F4] hover:bg-[#E6E8EC] text-gray-600 text-sm font-semibold transition-colors flex items-center justify-center h-8 w-8 flex-shrink-0 cursor-pointer"
-            aria-label="Quick Add"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
         </div>
 
-        {/* ── RIGHT SECTION (ACTIONS & AUTH BUTTONS) ────────────────── */}
+        {/* ── RIGHT SECTION (ACTIONS, NOTIFICATION SERVICE & AUTH) ───────── */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <button
             onClick={() => showToast("Upgrade Account", "You are already on the highest tier demo account.", "info")}
@@ -246,18 +272,108 @@ export default function DashboardHeader() {
             Upgrade
           </button>
 
-          <button
-            onClick={() => showToast("Notifications", "You have no new notifications.", "info")}
-            className="relative p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
-            aria-label="Notifications"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
-          </button>
+          {/* Notification Bell Button with Notification Service */}
+          <div className="relative">
+            <button
+              ref={notifBtnRef}
+              onClick={() => {
+                setShowNotifDrawer((v) => !v);
+                setUnreadNotifCount(0);
+              }}
+              className="relative p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors cursor-pointer"
+              aria-label="Notifications"
+              title="Meeting Reminders & Notifications"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadNotifCount > 0 && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+              )}
+            </button>
+
+            {/* Notification Service Drawer / Popover */}
+            {showNotifDrawer && (
+              <div
+                ref={notifRef}
+                className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-[#E2E4E8] py-2 z-50 animate-in fade-in slide-in-from-top-2"
+              >
+                <div className="px-4 py-2.5 border-b border-[#E2E4E8] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-[#0E71EB]" />
+                    <span className="text-xs font-bold text-[#131619]">Meeting Reminders</span>
+                  </div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#0E71EB]/10 text-[#0E71EB]">
+                    {notifications.length} Active
+                  </span>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto p-2 space-y-2">
+                  {notifications.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-gray-500">
+                      <Clock className="w-6 h-6 text-gray-300 mx-auto mb-1" />
+                      No upcoming meeting reminders right now.
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`p-3 rounded-xl border transition-all ${
+                          n.urgency === "imminent"
+                            ? "bg-[#FFF5F5] border-[#FFD0D0]"
+                            : n.urgency === "soon"
+                            ? "bg-[#FFF9F0] border-[#FFE4C4]"
+                            : "bg-[#F8F9FA] border-[#EBECEF]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                            n.urgency === "imminent"
+                              ? "bg-[#FF3B30] text-white"
+                              : n.urgency === "soon"
+                              ? "bg-[#FF9500] text-white"
+                              : "bg-[#0E71EB] text-white"
+                          }`}>
+                            {n.time_until}
+                          </span>
+                          <span className="text-[10px] font-mono text-gray-500">{n.meeting_code}</span>
+                        </div>
+                        <p className="text-xs font-bold text-[#131619] leading-tight">{n.title}</p>
+                        <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">{n.message}</p>
+
+                        <div className="mt-2 flex items-center justify-end">
+                          <button
+                            onClick={() => {
+                              setShowNotifDrawer(false);
+                              router.push(`/meeting/${n.meeting_code}`);
+                            }}
+                            className="px-3 py-1 bg-[#0E71EB] hover:bg-[#0B5CBE] text-white text-[11px] font-semibold rounded-lg shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <Video className="w-3 h-3" /> Join Now
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="border-t border-[#E2E4E8] pt-2 px-3 flex items-center justify-between text-[11px] text-gray-500">
+                  <span>Notification Service Active</span>
+                  <button
+                    onClick={() => {
+                      setNotifications([]);
+                      setShowNotifDrawer(false);
+                    }}
+                    className="text-[#0E71EB] hover:underline cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
-            onClick={() => showToast("Calendar", "Calendar sync is active.", "info")}
-            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
+            onClick={() => showToast("Calendar", "Calendar notification service is synced with SQLite database.", "info")}
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors cursor-pointer"
             aria-label="Calendar"
           >
             <Calendar className="w-4 h-4" />

@@ -137,6 +137,60 @@ def get_recent_meetings(
     )
 
 
+def get_user_notifications(
+    db: Session,
+    user_id: Optional[int] = None,
+) -> List[dict]:
+    """
+    Generate reminder notifications for upcoming scheduled meetings.
+    Calculates time remaining and sets urgency labels.
+    """
+    upcoming = get_upcoming_meetings(db, limit=10, user_id=user_id)
+    notifications = []
+    now = datetime.now(timezone.utc)
+
+    for m in upcoming:
+        if not m.scheduled_at:
+            continue
+
+        sched = m.scheduled_at
+        if sched.tzinfo is None:
+            sched = sched.replace(tzinfo=timezone.utc)
+
+        diff_seconds = (sched - now).total_seconds()
+        diff_minutes = int(diff_seconds // 60)
+
+        if diff_seconds < -600:  # Past by more than 10 mins, skip
+            continue
+
+        if diff_minutes <= 5:
+            urgency = "imminent"
+            time_until = "Starting now" if diff_minutes <= 0 else f"in {diff_minutes} min"
+            msg = f"Meeting '{m.title}' is starting soon! Click to join."
+        elif diff_minutes <= 60:
+            urgency = "soon"
+            time_until = f"in {diff_minutes} mins"
+            msg = f"Upcoming meeting '{m.title}' in {diff_minutes} minutes."
+        else:
+            urgency = "upcoming"
+            hours = diff_minutes // 60
+            time_until = f"in {hours}h {diff_minutes % 60}m"
+            msg = f"Scheduled meeting '{m.title}' coming up."
+
+        notifications.append({
+            "id": f"notif-{m.id}-{m.meeting_code}",
+            "meeting_id": m.id,
+            "meeting_code": m.meeting_code,
+            "title": m.title,
+            "scheduled_at": m.scheduled_at,
+            "message": msg,
+            "time_until": time_until,
+            "urgency": urgency,
+        })
+
+    return notifications
+
+
 def create_meeting(db: Session, meeting: schemas.MeetingCreate) -> models.Meeting:
     """Create a new instant meeting with a freshly generated meeting code."""
     code = _generate_meeting_code()

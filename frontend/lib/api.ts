@@ -151,6 +151,31 @@ export async function getRecentMeetings(userId?: number): Promise<Meeting[]> {
   }
 }
 
+export interface NotificationItem {
+  id: string;
+  meeting_id: number;
+  meeting_code: string;
+  title: string;
+  scheduled_at: string | null;
+  message: string;
+  time_until: string;
+  urgency: "imminent" | "soon" | "upcoming";
+}
+
+/**
+ * Fetch meeting notifications & reminders for the user.
+ */
+export async function getMeetingNotifications(userId?: number): Promise<NotificationItem[]> {
+  try {
+    const qs = userId != null ? `?user_id=${userId}` : "";
+    return await apiFetch<NotificationItem[]>(`/api/meetings/notifications${qs}`);
+  } catch {
+    console.warn("[API] getMeetingNotifications: backend offline — returning []");
+    return [];
+  }
+}
+
+
 /** Record a participant joining a meeting. Returns the Participant record. */
 export async function joinMeeting(
   meetingId: number,

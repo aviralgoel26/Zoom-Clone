@@ -80,6 +80,15 @@ def list_recent_meetings(
     return crud.get_recent_meetings(db, user_id=user_id)
 
 
+@router.get("/notifications", response_model=List[schemas.NotificationSchema])
+def list_meeting_notifications(
+    user_id: Optional[int] = Query(default=None, description="Filter notifications by user ID"),
+    db: Session = Depends(get_db),
+):
+    """Return active reminder notifications for upcoming meetings."""
+    return crud.get_user_notifications(db, user_id=user_id)
+
+
 # ---------------------------------------------------------------------------
 # Validate / fetch meeting by code (join flow)
 # ---------------------------------------------------------------------------
