@@ -239,6 +239,7 @@ export default function MeetingPage() {
     sendChatMessage,
     reactions,
     sendReaction,
+    myPeerId,
   } = useWebRTC({
     meetingId: meetingCode,
     displayName: displayName || "Guest",
@@ -538,6 +539,7 @@ export default function MeetingPage() {
               remotePeers={remotePeers}
               stopIncomingVideo={stopIncomingVideo}
               reactions={reactions}
+              localPeerId={myPeerId}
             />
           )}
         </div>

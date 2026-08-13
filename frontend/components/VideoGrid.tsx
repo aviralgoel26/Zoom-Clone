@@ -157,6 +157,8 @@ interface VideoGridProps {
   /** When true, remote video feeds are not rendered (low-bandwidth mode) */
   stopIncomingVideo?: boolean;
   reactions?: ReactionEvent[];
+  /** This client's own peerId for precise reaction badge matching */
+  localPeerId?: string;
 }
 
 export default function VideoGrid({
@@ -168,6 +170,7 @@ export default function VideoGrid({
   remotePeers,
   stopIncomingVideo = false,
   reactions = [],
+  localPeerId = "",
 }: VideoGridProps) {
   const totalParticipants = 1 + remotePeers.length;
 
@@ -181,9 +184,9 @@ export default function VideoGrid({
       ? "grid-cols-2"
       : "grid-cols-3";
 
-  // Find active reaction for local user (if any)
+  // Match reaction to local tile by peerId (most accurate) then fall back to sender name
   const localReaction = reactions.find(
-    (r) => r.sender === localDisplayName || r.peerId === "local"
+    (r) => r.peerId === localPeerId || (!localPeerId && r.sender === localDisplayName)
   );
 
   return (

@@ -102,6 +102,8 @@ interface UseWebRTCReturn {
   // Emoji reactions
   reactions: ReactionEvent[];
   sendReaction: (emoji: string) => void;
+  /** This client's own peer ID (used for reaction tile matching) */
+  myPeerId: string;
 }
 
 // ICE configuration — Google's public STUN server for NAT traversal.
@@ -330,17 +332,29 @@ export function useWebRTC({
               sdp: pc.localDescription,
               targetPeerId: remotePeerId,
               fromPeerId: myPeerIdRef.current,
+              displayName,          // ← fix: include our name so caller renders it correctly
             })
           );
 
         } else if (type === "answer") {
-          // The peer accepted our offer.
+          // The peer accepted our offer — now we know their displayName too.
           const remotePeerId = message.fromPeerId as string;
+          const remoteDisplayName = (message.displayName as string) ?? "";
           const pc = peerConnectionsRef.current.get(remotePeerId);
           if (pc) {
             await pc.setRemoteDescription(
               new RTCSessionDescription(
                 message.sdp as RTCSessionDescriptionInit
+              )
+            );
+          }
+          // Update the name for this peer if it arrived before the track
+          if (remoteDisplayName) {
+            setRemotePeers((prev) =>
+              prev.map((p) =>
+                p.peerId === remotePeerId
+                  ? { ...p, displayName: remoteDisplayName }
+                  : p
               )
             );
           }
@@ -841,5 +855,6 @@ export function useWebRTC({
     sendChatMessage,
     reactions,
     sendReaction,
+    myPeerId: myPeerIdRef.current,
   };
 }
