@@ -101,26 +101,29 @@ export default function DashboardPage() {
     }
   }, [user]);
 
-  // Fetch meetings on mount
+  // Fetch meetings when user auth state changes (login/logout)
   useEffect(() => {
     const load = async () => {
       setLoadingMeetings(true);
+      const uid = user?.id;
       const [upcoming, recent] = await Promise.all([
-        getUpcomingMeetings(),
-        getRecentMeetings(),
+        getUpcomingMeetings(uid),
+        getRecentMeetings(uid),
       ]);
       setUpcomingMeetings(upcoming);
       setRecentMeetings(recent);
       setLoadingMeetings(false);
     };
     load();
-  }, []);
+  // Re-fetch whenever the logged-in user changes (login or logout)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Create instant meeting — host only via ?host=true (with offline fallback)
   const handleNewMeeting = async () => {
     setIsCreating(true);
     try {
-      const meeting = await createInstantMeeting("Instant Meeting");
+      const meeting = await createInstantMeeting("Instant Meeting", user?.id);
       if (meeting?.meeting_code) {
         router.push(`/meeting/${meeting.meeting_code}?host=true`);
         return;
@@ -528,105 +531,175 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* Card Body: Meeting Card Item */}
-          <div className="p-4 space-y-3">
+          {/* Card Body: Fully data-driven meeting list */}
+          <div className="p-4 space-y-2">
             {loadingMeetings ? (
-              <div className="bg-[#F8F9FA] rounded-2xl p-5 border border-[#EBECEF] animate-pulse flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-[#E2E4E8]" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3.5 bg-[#E2E4E8] rounded w-1/3" />
-                  <div className="h-3 bg-[#E2E4E8] rounded w-1/4" />
+              // Skeleton loading state
+              [0, 1].map((i) => (
+                <div key={i} className="rounded-2xl p-4 border border-[#EBECEF] animate-pulse flex items-center gap-4">
+                  <div className="w-9 h-9 rounded-xl bg-[#E2E4E8] flex-shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3.5 bg-[#E2E4E8] rounded w-2/5" />
+                    <div className="h-3 bg-[#E2E4E8] rounded w-1/4" />
+                  </div>
                 </div>
+              ))
+            ) : !user ? (
+              // ── Not signed in ────────────────────────────────────────────
+              <div className="py-10 flex flex-col items-center justify-center gap-3 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-[#EEF5FE] flex items-center justify-center">
+                  <Video className="w-6 h-6 text-[#0E71EB]" />
+                </div>
+                <p className="text-sm font-semibold text-[#131619]">
+                  Sign in to see your meetings
+                </p>
+                <p className="text-xs text-[#6E7683] max-w-[220px] leading-relaxed">
+                  Your scheduled and recent meetings will appear here after you sign in.
+                </p>
+              </div>
+            ) : upcomingMeetings.length === 0 && recentMeetings.length === 0 ? (
+              // ── Signed in but no meetings ─────────────────────────────────
+              <div className="py-10 flex flex-col items-center justify-center gap-3 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-[#F4F5F7] flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-[#6E7683]" />
+                </div>
+                <p className="text-sm font-semibold text-[#131619]">No meetings today</p>
+                <p className="text-xs text-[#6E7683] max-w-[220px] leading-relaxed">
+                  Schedule a meeting or start an instant one to get going.
+                </p>
+                <button
+                  onClick={() => router.push("/schedule")}
+                  className="mt-1 px-4 py-2 text-xs font-semibold text-[#0E71EB] rounded-xl border border-[#0E71EB]/30 hover:bg-[#EEF5FE] transition-colors cursor-pointer"
+                >
+                  + Schedule a meeting
+                </button>
               </div>
             ) : (
-              <div>
-                {/* Official Screenshot Meeting Item */}
-                <div className="bg-[#F8F9FA] rounded-2xl p-5 border border-[#EBECEF] flex items-center justify-between hover:bg-[#F1F3F5] transition-colors group shadow-2xs">
-                  <div className="flex items-center gap-4">
-                    {/* Meeting Video Box Icon */}
-                    <div className="w-11 h-11 rounded-xl bg-white border border-[#E2E4E8] flex items-center justify-center flex-shrink-0 text-[#0E71EB] shadow-2xs">
-                      <Video className="w-5 h-5" />
-                    </div>
-                    {/* Details */}
-                    <div>
-                      <h3 className="text-sm font-bold text-[#131619] leading-tight">
-                        Aviral Goel&apos;s Zoom Meeting
-                      </h3>
-                      <p className="text-xs text-[#6E7683] mt-1 font-medium">
-                        Today, {formattedShortDate} | 12:44 - 12:47
-                      </p>
-                      <p className="text-[11.5px] text-[#6E7683] mt-0.5 font-normal">
-                        Host: Aviral Goel
-                      </p>
-                    </div>
-                  </div>
+              // ── Meeting rows ──────────────────────────────────────────────
+              <>
+                {/* Upcoming (scheduled) meetings */}
+                {upcomingMeetings.map((m) => {
+                  const dt = m.scheduled_at ? new Date(m.scheduled_at) : null;
+                  const timeLabel = dt
+                    ? dt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
+                    : "";
+                  const endMin = dt && m.duration_minutes
+                    ? new Date(dt.getTime() + m.duration_minutes * 60000)
+                        .toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
+                    : null;
+                  const dateLabel = dt
+                    ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                    : "";
+                  const isToday = dt
+                    ? dt.toDateString() === new Date().toDateString()
+                    : false;
 
-                  {/* Actions Right */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      id="start-target-meeting"
-                      onClick={handleNewMeeting}
-                      className="px-4 py-1.5 bg-[#0E71EB] hover:bg-[#0B5EC4] text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+                  return (
+                    <div
+                      key={`upcoming-${m.id}`}
+                      className="bg-[#F8F9FA] rounded-2xl p-4 border border-[#EBECEF] flex items-center justify-between hover:bg-[#F1F3F5] transition-colors group shadow-2xs"
                     >
-                      Start
-                    </button>
-                    <button
-                      id="target-meeting-more"
-                      aria-label="Meeting options"
-                      className="p-1.5 rounded-lg hover:bg-[#E2E4E8] text-[#6E7683] hover:text-[#131619] transition-colors cursor-pointer"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Additional user-scheduled/recent meetings if present */}
-                {upcomingMeetings.length > 0 && (
-                  <div className="mt-3 space-y-2.5">
-                    {upcomingMeetings.map((m) => (
-                      <div
-                        key={m.id}
-                        className="bg-[#F8F9FA] rounded-2xl p-4 border border-[#EBECEF] flex items-center justify-between hover:bg-[#F1F3F5] transition-colors"
-                      >
-                        <div className="flex items-center gap-3.5">
-                          <div className="w-9 h-9 rounded-xl bg-white border border-[#E2E4E8] flex items-center justify-center text-[#0E71EB]">
-                            <Video className="w-4.5 h-4.5" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-[#131619]">
-                              {m.title}
-                            </p>
-                            <p className="text-[11px] text-[#6E7683]">
-                              {m.meeting_code}
-                            </p>
-                          </div>
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-9 h-9 rounded-xl bg-white border border-[#E2E4E8] flex items-center justify-center text-[#0E71EB] shadow-2xs flex-shrink-0">
+                          <Video className="w-4.5 h-4.5" />
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleCopyCode(m.meeting_code)}
-                            className="p-1.5 rounded-md text-[#6E7683] hover:text-[#131619] cursor-pointer"
-                            title="Copy meeting link"
-                          >
-                            {copiedCode === m.meeting_code ? (
-                              <Check className="w-4 h-4 text-[#34C759]" />
-                            ) : (
-                              <Copy className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() =>
-                              router.push(`/meeting/${m.meeting_code}`)
-                            }
-                            className="px-3.5 py-1.5 bg-[#0E71EB] text-white text-xs font-semibold rounded-lg hover:bg-[#0B5EC4] cursor-pointer"
-                          >
-                            Start
-                          </button>
+                        <div>
+                          <p className="text-sm font-bold text-[#131619] leading-tight">{m.title}</p>
+                          {dt && (
+                            <p className="text-xs text-[#6E7683] mt-0.5 font-medium">
+                              {isToday ? "Today" : dateLabel},{" "}
+                              {timeLabel}{endMin ? ` – ${endMin}` : ""}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-[#9EA6B3] mt-0.5">{m.meeting_code}</p>
                         </div>
                       </div>
-                    ))}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleCopyCode(m.meeting_code)}
+                          className="p-1.5 rounded-md text-[#6E7683] hover:text-[#131619] cursor-pointer"
+                          title="Copy meeting link"
+                        >
+                          {copiedCode === m.meeting_code
+                            ? <Check className="w-4 h-4 text-[#34C759]" />
+                            : <Copy className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => router.push(`/meeting/${m.meeting_code}?host=true`)}
+                          className="px-3.5 py-1.5 bg-[#0E71EB] text-white text-xs font-semibold rounded-lg hover:bg-[#0B5EC4] transition-all cursor-pointer shadow-xs"
+                        >
+                          Start
+                        </button>
+                        <button
+                          aria-label="Meeting options"
+                          className="p-1.5 rounded-lg hover:bg-[#E2E4E8] text-[#6E7683] hover:text-[#131619] transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Divider between upcoming and recent */}
+                {upcomingMeetings.length > 0 && recentMeetings.length > 0 && (
+                  <div className="flex items-center gap-3 py-1">
+                    <div className="flex-1 border-t border-[#E2E4E8]" />
+                    <span className="text-[10px] font-semibold text-[#9EA6B3] uppercase tracking-wide">Recent</span>
+                    <div className="flex-1 border-t border-[#E2E4E8]" />
                   </div>
                 )}
-              </div>
+
+                {/* Recent (ended / active) meetings */}
+                {recentMeetings.map((m) => {
+                  const dt = m.created_at ? new Date(m.created_at) : null;
+                  const dateLabel = dt
+                    ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                    : "";
+                  const isActive = m.status === "active";
+
+                  return (
+                    <div
+                      key={`recent-${m.id}`}
+                      className="rounded-2xl p-4 border border-[#EBECEF] flex items-center justify-between hover:bg-[#F8F9FA] transition-colors group"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-9 h-9 rounded-xl bg-[#F4F5F7] border border-[#E2E4E8] flex items-center justify-center text-[#6E7683] flex-shrink-0">
+                          <Video className="w-4.5 h-4.5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-[#131619] leading-tight">{m.title}</p>
+                            {isActive && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#34C759]/15 text-[#1D9E44]">LIVE</span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-[#9EA6B3] mt-0.5">
+                            {dateLabel} · {m.meeting_code}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleCopyCode(m.meeting_code)}
+                          className="p-1.5 rounded-md text-[#6E7683] hover:text-[#131619] cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Copy meeting link"
+                        >
+                          {copiedCode === m.meeting_code
+                            ? <Check className="w-4 h-4 text-[#34C759]" />
+                            : <Copy className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => router.push(`/meeting/${m.meeting_code}`)}
+                          className="px-3.5 py-1.5 bg-[#0E71EB] text-white text-xs font-semibold rounded-lg hover:bg-[#0B5EC4] transition-all cursor-pointer shadow-xs"
+                        >
+                          {isActive ? "Join" : "Start"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
             )}
           </div>
 

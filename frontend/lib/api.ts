@@ -123,11 +123,13 @@ export async function validateMeeting(
 
 /**
  * Fetch upcoming scheduled meetings for the dashboard.
+ * Pass userId to get only meetings hosted by or joined by that user.
  * Returns an empty array if the backend is offline so the UI degrades gracefully.
  */
-export async function getUpcomingMeetings(): Promise<Meeting[]> {
+export async function getUpcomingMeetings(userId?: number): Promise<Meeting[]> {
   try {
-    return await apiFetch<Meeting[]>("/api/meetings/upcoming");
+    const qs = userId != null ? `?user_id=${userId}` : "";
+    return await apiFetch<Meeting[]>(`/api/meetings/upcoming${qs}`);
   } catch {
     console.warn("[API] getUpcomingMeetings: backend offline — returning []");
     return [];
@@ -136,11 +138,13 @@ export async function getUpcomingMeetings(): Promise<Meeting[]> {
 
 /**
  * Fetch recent (ended / active) meetings for the dashboard.
+ * Pass userId to get only meetings hosted by or joined by that user.
  * Returns an empty array if the backend is offline.
  */
-export async function getRecentMeetings(): Promise<Meeting[]> {
+export async function getRecentMeetings(userId?: number): Promise<Meeting[]> {
   try {
-    return await apiFetch<Meeting[]>("/api/meetings/recent");
+    const qs = userId != null ? `?user_id=${userId}` : "";
+    return await apiFetch<Meeting[]>(`/api/meetings/recent${qs}`);
   } catch {
     console.warn("[API] getRecentMeetings: backend offline — returning []");
     return [];

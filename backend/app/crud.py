@@ -67,36 +67,71 @@ def get_meeting_by_id(db: Session, meeting_id: int) -> Optional[models.Meeting]:
     return db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
 
 
-def get_upcoming_meetings(db: Session, limit: int = 10) -> List[models.Meeting]:
+def get_upcoming_meetings(
+    db: Session,
+    limit: int = 20,
+    user_id: Optional[int] = None,
+) -> List[models.Meeting]:
     """
-    Return meetings with status 'scheduled' and a future scheduled_at,
-    ordered by soonest first.
+    Return scheduled meetings with a future scheduled_at, ordered by soonest first.
+    If user_id is provided, only return meetings hosted by that user OR where they
+    appear as a participant.
     """
     now = datetime.now(timezone.utc)
-    return (
+    q = (
         db.query(models.Meeting)
         .filter(
             models.Meeting.status == models.MeetingStatus.scheduled,
             models.Meeting.scheduled_at > now,
         )
-        .order_by(models.Meeting.scheduled_at.asc())
+    )
+    if user_id is not None:
+        # meetings hosted by user OR meetings the user joined as participant
+        participated_meeting_ids = (
+            db.query(models.Participant.meeting_id)
+            .filter(models.Participant.user_id == user_id)
+            .subquery()
+        )
+        q = q.filter(
+            (models.Meeting.host_id == user_id)
+            | models.Meeting.id.in_(participated_meeting_ids)
+        )
+    return (
+        q.order_by(models.Meeting.scheduled_at.asc())
         .limit(limit)
         .all()
     )
 
 
-def get_recent_meetings(db: Session, limit: int = 10) -> List[models.Meeting]:
+def get_recent_meetings(
+    db: Session,
+    limit: int = 20,
+    user_id: Optional[int] = None,
+) -> List[models.Meeting]:
     """
     Return recently ended or active meetings, ordered by creation date descending.
+    If user_id is provided, filter to meetings hosted by or participated in by that user.
     """
-    return (
+    q = (
         db.query(models.Meeting)
         .filter(
             models.Meeting.status.in_(
                 [models.MeetingStatus.ended, models.MeetingStatus.active]
             )
         )
-        .order_by(models.Meeting.created_at.desc())
+    )
+    if user_id is not None:
+        participated_meeting_ids = (
+            db.query(models.Participant.meeting_id)
+            .filter(models.Participant.user_id == user_id)
+            .subquery()
+        )
+        q = q.filter(
+            (models.Meeting.host_id == user_id)
+            | models.Meeting.id.in_(participated_meeting_ids)
+        )
+    return (
+        q.order_by(models.Meeting.created_at.desc())
         .limit(limit)
         .all()
     )

@@ -14,9 +14,9 @@ Endpoints:
   POST   /api/meetings/{id}/end         → host ends a meeting (status → ended)
 """
 
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
@@ -60,16 +60,24 @@ def create_scheduled_meeting(
 # List upcoming meetings (scheduled, future date)
 # ---------------------------------------------------------------------------
 @router.get("/upcoming", response_model=List[schemas.MeetingSchema])
-def list_upcoming_meetings(db: Session = Depends(get_db)):
-    return crud.get_upcoming_meetings(db)
+def list_upcoming_meetings(
+    user_id: Optional[int] = Query(default=None, description="Filter by host or participant user ID"),
+    db: Session = Depends(get_db),
+):
+    """Return upcoming scheduled meetings. Filtered to a specific user when user_id is provided."""
+    return crud.get_upcoming_meetings(db, user_id=user_id)
 
 
 # ---------------------------------------------------------------------------
 # List recent meetings (ended or active)
 # ---------------------------------------------------------------------------
 @router.get("/recent", response_model=List[schemas.MeetingSchema])
-def list_recent_meetings(db: Session = Depends(get_db)):
-    return crud.get_recent_meetings(db)
+def list_recent_meetings(
+    user_id: Optional[int] = Query(default=None, description="Filter by host or participant user ID"),
+    db: Session = Depends(get_db),
+):
+    """Return recent meetings. Filtered to a specific user when user_id is provided."""
+    return crud.get_recent_meetings(db, user_id=user_id)
 
 
 # ---------------------------------------------------------------------------

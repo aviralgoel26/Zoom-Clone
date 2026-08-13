@@ -21,9 +21,11 @@ import {
   Video,
 } from "lucide-react";
 import { scheduleMeeting } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export default function SchedulePage() {
   const router = useRouter();
+  const { user } = useAuth();
 
   const [form, setForm] = useState({
     title: "",
@@ -60,6 +62,7 @@ export default function SchedulePage() {
         description: form.description || undefined,
         scheduled_at: localDatetime.toISOString(),
         duration_minutes: parseInt(form.duration, 10) || 60,
+        host_id: user?.id,
       });
       setSuccess(true);
       // Navigate home after short delay so user sees the success state
