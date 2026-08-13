@@ -356,6 +356,13 @@ export function useWebRTC({
           const remoteRole = (message.role as "host" | "participant") ?? "participant";
           console.log(`[WS] Peer joined: ${remotePeerId} (${remoteDisplayName}, ${remoteRole})`);
 
+          // Clean up old stale peer connection if re-joining
+          const oldPc = peerConnectionsRef.current.get(remotePeerId);
+          if (oldPc) {
+            try { oldPc.close(); } catch {}
+            peerConnectionsRef.current.delete(remotePeerId);
+          }
+
           updateRemotePeerInfo(remotePeerId, remoteDisplayName, remoteRole);
 
           const pc = createPeerConnection(remotePeerId, remoteDisplayName, remoteRole);
@@ -378,6 +385,13 @@ export function useWebRTC({
           const remoteDisplayName = (message.displayName as string) ?? "Guest";
           const remoteRole = (message.role as "host" | "participant") ?? "participant";
           console.log(`[WS] Received offer from: ${remotePeerId} (${remoteDisplayName}, ${remoteRole})`);
+
+          // Clean up old stale peer connection if re-joining
+          const oldPc = peerConnectionsRef.current.get(remotePeerId);
+          if (oldPc) {
+            try { oldPc.close(); } catch {}
+            peerConnectionsRef.current.delete(remotePeerId);
+          }
 
           updateRemotePeerInfo(remotePeerId, remoteDisplayName, remoteRole);
 
@@ -445,17 +459,21 @@ export function useWebRTC({
           }
 
         } else if (type === "participant-left") {
-          const remotePeerId = message.peerId as string;
+          const remotePeerId = String(message.peerId || "");
           console.log(`[WS] Peer left: ${remotePeerId}`);
-          // Close and remove the peer connection
-          const pc = peerConnectionsRef.current.get(remotePeerId);
-          if (pc) {
-            pc.close();
-            peerConnectionsRef.current.delete(remotePeerId);
+          if (remotePeerId) {
+            const pc = peerConnectionsRef.current.get(remotePeerId);
+            if (pc) {
+              try { pc.close(); } catch {}
+              peerConnectionsRef.current.delete(remotePeerId);
+            }
+            peerDisplayNamesRef.current.delete(remotePeerId);
+            peerRolesRef.current.delete(remotePeerId);
+
+            setRemotePeers((prev) =>
+              prev.filter((p) => p.peerId !== remotePeerId)
+            );
           }
-          setRemotePeers((prev) =>
-            prev.filter((p) => p.peerId !== remotePeerId)
-          );
 
         } else if (type === "host-action") {
           /**

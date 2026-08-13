@@ -119,42 +119,35 @@ async def websocket_signaling(websocket: WebSocket, meeting_id: str):
                 logger.warning(f"[WS] Non-JSON message received, ignoring.")
                 continue
 
-            msg_type = message.get("type", "unknown")
-            logger.debug(f"[WS] Received '{msg_type}' in room {meeting_id}")
+            # Register peerId mapping if present in message
+            peer_id_in_msg = message.get("peerId") or message.get("fromPeerId")
+            if peer_id_in_msg:
+                manager.register_peer_id(websocket, str(peer_id_in_msg))
 
             # Step 4 — Route message based on type
             if msg_type in ("offer", "answer", "ice-candidate"):
-                # Peer-to-peer signaling — broadcast to all other peers.
-                # In a mesh topology every peer needs to know about every
-                # other peer, so we relay to all (not just a specific target).
                 await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type in ("participant-joined", "name-update"):
-                # New peer announces themselves or updates display name — relay to others
                 await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type == "participant-left":
-                # Peer is leaving gracefully — tell others to remove their video tile.
                 await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type == "host-action":
-                # Host commands — broadcast to room so all clients can react
                 action = message.get("action", "unknown")
                 logger.info(
                     f"[WS] host-action '{action}' in room {meeting_id}"
                 )
                 if action == "end-meeting":
-                    # End meeting for ALL connected participants in room
                     await manager.broadcast_to_all(message, meeting_id)
                 else:
                     await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type == "chat-message":
-                # In-meeting text chat relay.
                 await manager.broadcast(message, meeting_id, sender=websocket)
 
             elif msg_type == "reaction":
-                # In-meeting emoji reaction broadcast (relayed to all room members).
                 logger.info(
                     f"[WS] reaction '{message.get('emoji')}' in room {meeting_id}"
                 )
@@ -164,10 +157,10 @@ async def websocket_signaling(websocket: WebSocket, meeting_id: str):
                 logger.warning(f"[WS] Unknown message type: {msg_type}")
 
     except WebSocketDisconnect:
-        # Step 5 — Clean up on abrupt disconnect (tab close, network drop)
-        manager.disconnect(websocket, meeting_id)
+        # Step 5 — Clean up on abrupt disconnect (tab close, refresh, network drop)
+        left_peer_id = manager.disconnect(websocket, meeting_id)
         await manager.broadcast_to_all(
-            {"type": "participant-left", "peerId": id(websocket)},
+            {"type": "participant-left", "peerId": left_peer_id},
             meeting_id,
         )
-        logger.info(f"[WS] Client disconnected from room {meeting_id}.")
+        logger.info(f"[WS] Client {left_peer_id} disconnected from room {meeting_id}.")
