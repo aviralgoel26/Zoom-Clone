@@ -344,6 +344,14 @@ export default function DashboardPage() {
           <p className="text-sm text-[#6E7683] font-medium mt-2.5">
             {dateDisplay}
           </p>
+
+          {/* User Welcome Pill */}
+          {user && (
+            <div className="mt-3 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#0E71EB]/10 border border-[#0E71EB]/20 text-[#0E71EB] text-xs font-semibold animate-in fade-in">
+              <span className="w-2 h-2 rounded-full bg-[#34C759]" />
+              <span>Welcome back, {user.display_name}</span>
+            </div>
+          )}
         </div>
 
         {/* ── 2. 5-ICON QUICK ACTION ROW ────────────────────────── */}
