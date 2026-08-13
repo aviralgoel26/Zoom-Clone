@@ -67,6 +67,7 @@ interface ControlsBarProps {
   onShareScreen: () => void;
   onToggleStopIncomingVideo: () => void;
   onLeave: () => void;
+  onEndMeetingForAll?: () => void;
   showParticipants: boolean;
   showChat?: boolean;
   onToggleChat?: () => void;
@@ -88,6 +89,7 @@ export default function ControlsBar({
   onShareScreen,
   onToggleStopIncomingVideo,
   onLeave,
+  onEndMeetingForAll,
   showParticipants,
   showChat = false,
   onToggleChat,
@@ -96,6 +98,7 @@ export default function ControlsBar({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReactMenu, setShowReactMenu] = useState(false);
   const [showHostMenu, setShowHostMenu] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   const moreMenuRef   = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -103,6 +106,8 @@ export default function ControlsBar({
   const reactBtnRef   = useRef<HTMLButtonElement>(null);
   const hostMenuRef   = useRef<HTMLDivElement>(null);
   const hostBtnRef    = useRef<HTMLButtonElement>(null);
+  const leaveModalRef = useRef<HTMLDivElement>(null);
+  const leaveBtnRef   = useRef<HTMLButtonElement>(null);
 
   const handleCopyLink = async () => {
     // Copy direct participant URL without ?host=true
@@ -139,13 +144,21 @@ export default function ControlsBar({
       ) {
         setShowHostMenu(false);
       }
+      if (
+        leaveModalRef.current &&
+        !leaveModalRef.current.contains(e.target as Node) &&
+        leaveBtnRef.current &&
+        !leaveBtnRef.current.contains(e.target as Node)
+      ) {
+        setShowLeaveModal(false);
+      }
     };
 
-    if (showMoreMenu || showReactMenu || showHostMenu) {
+    if (showMoreMenu || showReactMenu || showHostMenu || showLeaveModal) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showMoreMenu, showReactMenu, showHostMenu]);
+  }, [showMoreMenu, showReactMenu, showHostMenu, showLeaveModal]);
 
   return (
     <div className="fixed bottom-0 left-0 right-0 flex items-center justify-center pb-5 z-40 pointer-events-none">
@@ -446,24 +459,101 @@ export default function ControlsBar({
 
         <Divider />
 
-        {/* ── Leave / End button ────────────────────────────── */}
-        <button
-          id="ctrl-leave"
-          onClick={onLeave}
-          className={`
-            flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl
-            transition-all duration-200
-            ${isHost
-              ? "bg-[#FF3B30] hover:bg-[#FF453A] text-white"
-              : "bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 text-[#FF3B30]"
-            }
-          `}
-        >
-          <PhoneOff className="w-5 h-5" />
-          <span className="text-[10px] font-medium">
-            {isHost ? "End" : "Leave"}
-          </span>
-        </button>
+        {/* ── Leave / End button (with options popover) ─────── */}
+        <div className="relative">
+          <button
+            ref={leaveBtnRef}
+            id="ctrl-leave"
+            onClick={() => {
+              setShowLeaveModal((v) => !v);
+              setShowMoreMenu(false);
+              setShowReactMenu(false);
+              setShowHostMenu(false);
+            }}
+            className={`
+              flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl
+              transition-all duration-200 cursor-pointer
+              ${isHost
+                ? "bg-[#E02828] hover:bg-[#F03030] text-white font-medium"
+                : "bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 text-[#FF3B30]"
+              }
+            `}
+          >
+            <PhoneOff className="w-5 h-5" />
+            <span className="text-[10px] font-medium">
+              {isHost ? "End" : "Leave"}
+            </span>
+          </button>
+
+          {/* Host / Participant Leave Options Popover (Matches Screenshot 2) */}
+          {showLeaveModal && (
+            <div
+              ref={leaveModalRef}
+              className="absolute bottom-full mb-3 right-0 w-64 bg-[#222225] border border-[#3A3A3C] rounded-2xl shadow-2xl p-3.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150"
+            >
+              {isHost ? (
+                <div className="flex flex-col gap-2">
+                  <button
+                    id="btn-end-meeting-for-all"
+                    onClick={() => {
+                      setShowLeaveModal(false);
+                      if (onEndMeetingForAll) {
+                        onEndMeetingForAll();
+                      } else {
+                        onLeave();
+                      }
+                    }}
+                    className="w-full bg-[#E02828] hover:bg-[#C92222] text-white font-medium text-xs py-2.5 px-4 rounded-xl transition-all shadow-xs cursor-pointer text-center"
+                  >
+                    End meeting for all
+                  </button>
+
+                  <button
+                    id="btn-leave-meeting-host"
+                    onClick={() => {
+                      setShowLeaveModal(false);
+                      onLeave();
+                    }}
+                    className="w-full bg-[#3A3A3C] hover:bg-[#48484A] text-white font-medium text-xs py-2.5 px-4 rounded-xl transition-all cursor-pointer text-center"
+                  >
+                    Leave meeting
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <button
+                    id="btn-leave-meeting-participant"
+                    onClick={() => {
+                      setShowLeaveModal(false);
+                      onLeave();
+                    }}
+                    className="w-full bg-[#E02828] hover:bg-[#C92222] text-white font-medium text-xs py-2.5 px-4 rounded-xl transition-all shadow-xs cursor-pointer text-center"
+                  >
+                    Leave meeting
+                  </button>
+                </div>
+              )}
+
+              {/* Bottom footer options */}
+              <div className="flex items-center justify-between mt-3 pt-2 border-t border-[#3A3A3C]/60 px-1">
+                <label className="flex items-center gap-1.5 text-[10px] text-[#8E8E93] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-[#48484A] bg-[#1C1C1E] text-[#0E71EB] w-3 h-3 focus:ring-0"
+                  />
+                  <span>Give feedback</span>
+                </label>
+                <button
+                  id="btn-cancel-leave"
+                  onClick={() => setShowLeaveModal(false)}
+                  className="text-[11px] text-[#8E8E93] hover:text-white font-medium transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

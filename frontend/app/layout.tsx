@@ -14,6 +14,10 @@ export const metadata: Metadata = {
   description:
     "A full-featured video conferencing application built with Next.js and WebRTC, mirroring the Zoom Workplace desktop experience.",
   keywords: ["video conferencing", "zoom clone", "webrtc", "meetings", "zoom workplace"],
+  other: {
+    google: "notranslate",
+    "chrome-note-taking": "none",
+  },
 };
 
 export default function RootLayout({

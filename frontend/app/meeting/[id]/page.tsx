@@ -247,22 +247,35 @@ export default function MeetingPage() {
   // Leave / End handlers
   // ---------------------------------------------------------------------------
   const handleLeave = useCallback(async () => {
-    leaveCall(); // Stops all tracks + closes WS + closes peer connections
+    leaveCall(); // Stops local tracks + closes WS
 
-    // Update DB record
     if (participantRecordId && meetingInfo?.meeting_id) {
       try {
         await leaveMeeting(meetingInfo.meeting_id, participantRecordId);
-        if (mutableRole === "host") {
-          await endMeeting(meetingInfo.meeting_id);
-        }
       } catch {
         console.warn("Could not update leave record");
       }
     }
 
     router.push("/");
-  }, [leaveCall, participantRecordId, meetingInfo, mutableRole, router]);
+  }, [leaveCall, participantRecordId, meetingInfo, router]);
+
+  const handleEndMeetingForAll = useCallback(async () => {
+    leaveCall(); // Stops all local tracks + WS
+
+    if (meetingInfo?.meeting_id) {
+      try {
+        if (participantRecordId) {
+          await leaveMeeting(meetingInfo.meeting_id, participantRecordId);
+        }
+        await endMeeting(meetingInfo.meeting_id);
+      } catch {
+        console.warn("Could not update end meeting status in DB");
+      }
+    }
+
+    router.push("/");
+  }, [leaveCall, participantRecordId, meetingInfo, router]);
 
   const handleCopyLink = async () => {
     // Copy clean participant join link without ?host=true
@@ -432,6 +445,8 @@ export default function MeetingPage() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+                  autoComplete="off"
+                  spellCheck={false}
                   className="w-full bg-[#2C2C2E] text-white placeholder-[#8E8E93] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#0E72ED] transition"
                   autoFocus
                 />
@@ -563,6 +578,7 @@ export default function MeetingPage() {
           onShareScreen={handleShareScreen}
           onToggleStopIncomingVideo={() => setStopIncomingVideo((v) => !v)}
           onLeave={handleLeave}
+          onEndMeetingForAll={handleEndMeetingForAll}
           showParticipants={showParticipants}
           showChat={showChat}
           onToggleChat={() => {
