@@ -1,19 +1,19 @@
 """
 auth_utils.py
 -------------
-Utility functions for password hashing (bcrypt) and JWT creation/verification.
+Utility functions for password hashing (native bcrypt) and JWT creation/verification.
 
-All secrets are loaded from the .env file via python-dotenv so they never
-appear in source code.
+Avoids passlib Python 3.13 / bcrypt 4+ compatibility issues by using the standard
+bcrypt library directly.
 """
 
 import os
 from datetime import datetime, timedelta
 from typing import Optional
 
+import bcrypt
 from dotenv import load_dotenv
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 load_dotenv()
 
@@ -24,20 +24,25 @@ SECRET_KEY: str = os.getenv("SECRET_KEY", "fallback-insecure-key")
 ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_DAYS: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_DAYS", "7"))
 
-# ---------------------------------------------------------------------------
-# Bcrypt password context
-# ---------------------------------------------------------------------------
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
+# ---------------------------------------------------------------------------
+# Native bcrypt password hashing
+# ---------------------------------------------------------------------------
 def hash_password(plain: str) -> str:
     """Return bcrypt hash of a plaintext password."""
-    return pwd_context.hash(plain)
+    password_bytes = plain.encode("utf-8")[:72]   # bcrypt max 72 bytes
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_bytes, salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Return True if plain matches the stored bcrypt hash."""
-    return pwd_context.verify(plain, hashed)
+    try:
+        password_bytes = plain.encode("utf-8")[:72]
+        hashed_bytes = hashed.encode("utf-8")
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +51,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
     Encode a JWT containing `data` with an expiry.
-    The `sub` claim should be the user's ID (as a string).
+    The `sub` claim is the user's ID (as a string).
     """
     to_encode = data.copy()
     expire = datetime.utcnow() + (

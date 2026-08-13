@@ -72,11 +72,21 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--zoom-text-tertiary); }
 
 /* ============================================================
-   FOCUS RINGS
+   FOCUS RINGS & AUTOFILL OVERRIDES
    ============================================================ */
 :focus-visible {
   outline: 2px solid var(--zoom-blue);
   outline-offset: 2px;
+}
+
+/* Chrome/Edge autofill override to preserve input bg & text color */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px white inset !important;
+  -webkit-text-fill-color: #131619 !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 /* ============================================================

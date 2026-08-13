@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import meetings, signaling
+from app.routers import auth, meetings, signaling
 
 # ---------------------------------------------------------------------------
 # Logging
