@@ -1,199 +1,337 @@
-# Zoom Web App Clone
+# 🎥 Zoom Workplace Clone
 
-A full-stack video conferencing application mimicking Zoom Workplace, built for a 1-day SDE Hiring Assessment.
+> A full-stack, pixel-perfect video conferencing web application built to demonstrate production-grade engineering skills — WebRTC, FastAPI, SQLite, Next.js App Router, and real-time WebSocket signaling.
 
----
-
-## System Architecture
-
-### REST Flow
-```
-Browser (Next.js :3000)
-        │
-        │  HTTP REST (fetch / axios)
-        ▼
-FastAPI Server (:8000)
-        │
-        │  SQLAlchemy ORM
-        ▼
-  SQLite (sql_app.db)
-```
-
-### Real-Time Media Flow
-```
-Browser A                    FastAPI (Signaling Only)              Browser B
-   │                                   │                               │
-   │──── WS connect (/ws/meeting/id) ──►│                               │
-   │                                   │◄── WS connect ────────────────│
-   │                                   │                               │
-   │──── { type: "offer", sdp } ──────►│──── relay to B ──────────────►│
-   │                                   │                               │
-   │◄─── { type: "answer", sdp } ──────│◄─── from B ───────────────────│
-   │                                   │                               │
-   │◄─── ICE candidates ───────────────│◄─── ICE candidates ────────── │
-   │                                   │                               │
-   │◄════════════ WebRTC P2P Media (Audio/Video) ═══════════════════► │
-                  (Direct browser-to-browser, server not involved)
-```
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python)](https://python.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite)](https://sqlite.org/)
+[![WebRTC](https://img.shields.io/badge/WebRTC-P2P_Mesh-FF6B35)](https://webrtc.org/)
 
 ---
 
-## Tech Stack
+## 🔗 Links
 
-| Layer      | Technology                          |
-|------------|-------------------------------------|
-| Frontend   | Next.js 16, TypeScript, Tailwind CSS, Lucide React |
-| Backend    | Python 3.11+, FastAPI, Uvicorn      |
-| Database   | SQLite via SQLAlchemy ORM           |
-| Real-Time  | WebRTC (P2P Mesh) + WebSocket (Signaling) |
-| STUN       | stun:stun.l.google.com:19302        |
+| | URL |
+|---|---|
+| **Live Demo** | _Deploy to Vercel (frontend) + Render (backend)_ |
+| **GitHub** | https://github.com/aviralgoel26/Zoom-Clone |
+| **Swagger UI** | http://localhost:8000/docs (when running locally) |
 
 ---
 
-## Local Setup Instructions
+## ✨ Features
+
+| Feature | Status | Details |
+|---|---|---|
+| **Instant Meeting** | ✅ | Generates unique `XXX-XXX-XXX` meeting code, routes host directly into room |
+| **Join Meeting** | ✅ | Modal with meeting ID validation against backend before allowing entry |
+| **Schedule Meeting** | ✅ | Full form with title, date/time, duration — persisted to SQLite |
+| **User Authentication** | ✅ | JWT-based sign up / sign in with bcrypt password hashing |
+| **Video Grid** | ✅ | Responsive: 1→2→2×2→3-col adaptive grid based on participant count |
+| **Speaker View** | ✅ | Large primary tile (75%) + horizontal thumbnail strip |
+| **Audio / Video Toggle** | ✅ | Mic and camera on/off with live stream track enabling/disabling |
+| **Screen Sharing** | ✅ | `getDisplayMedia()` — share entire screen or app window |
+| **Emoji Reactions** | ✅ | 7 emoji reactions broadcast via WebSocket, floating overlay + tile badge |
+| **Chat** | ✅ | In-meeting chat drawer with real-time WebSocket messaging |
+| **Participant List** | ✅ | Host controls: Mute All, Remove, Make Host, per-participant ⋮ menus |
+| **Host Authorization** | ✅ | URL-param only (`?host=true`) — no client-side role escalation |
+| **Meeting Duration Timer** | ✅ | Count-up `MM:SS` / `HH:MM:SS` displayed in meeting top bar |
+| **Coming-Soon Toast** | ✅ | Zoom-styled animated notifications for unbuilt modules |
+| **User-scoped Meetings** | ✅ | Dashboard shows only the logged-in user's meetings from DB |
+| **Connection Health** | ✅ | Live ICE connection state badge |
+| **Low-bandwidth Mode** | ✅ | Stop Incoming Video toggle hides all remote feeds |
+
+---
+
+## 🏗️ Architecture
+
+### System Topology
+```
+Browser A (Next.js :3000)
+    │
+    │  HTTP REST (fetch)           WebSocket (signaling only)
+    ▼                                         ▼
+FastAPI Server (:8000) ◄─────────────────────────────────────
+    │                                         │
+    │  SQLAlchemy ORM                         │  Room-scoped WS manager
+    ▼                                         ▼
+SQLite (sql_app.db)                 Browser B (Next.js :3000)
+
+         ┌────────────────────────────────────────┐
+         │       WebRTC P2P Media (after signal)   │
+         │     Audio + Video flows peer-to-peer    │
+         │   (FastAPI server NOT in media path)    │
+         └────────────────────────────────────────┘
+```
+
+### WebRTC Signaling Flow
+```
+Browser A                    FastAPI (WS relay)              Browser B
+   │                               │                               │
+   │── WS connect (/ws/meeting/id)►│                               │
+   │                               │◄── WS connect ───────────────│
+   │                               │                               │
+   │── { type: "offer", sdp } ────►│──── relay to B ─────────────►│
+   │                               │                               │
+   │◄── { type: "answer", sdp } ───│◄─── from B ──────────────────│
+   │                               │                               │
+   │◄── ICE candidates ────────────│◄─── ICE candidates ──────────│
+   │                               │                               │
+   │◄═══════════ WebRTC P2P Media (Direct P2P) ════════════════════│
+```
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Frontend Framework** | Next.js 16 (App Router) | SSR/CSR hybrid, file-based routing |
+| **Language** | TypeScript 5 | Type safety across all components |
+| **Styling** | Tailwind CSS v4 | Utility-first, Zoom design tokens |
+| **Icons** | Lucide React | Consistent SVG icon system |
+| **Backend** | Python FastAPI | REST API + WebSocket signaling |
+| **ORM** | SQLAlchemy 2.0 | Database abstraction layer |
+| **Database** | SQLite | Zero-config local persistence |
+| **Auth** | JWT (PyJWT) + bcrypt | Stateless authentication |
+| **Real-Time** | WebRTC (P2P Mesh) | Audio/video media transport |
+| **Signaling** | WebSocket (FastAPI) | SDP offer/answer + ICE relay |
+| **STUN** | stun.l.google.com:19302 | NAT traversal for P2P connections |
+
+---
+
+## 🗄️ Database Schema
+
+```sql
+-- Registered & guest user profiles
+CREATE TABLE users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  display_name  TEXT    NOT NULL,
+  email         TEXT    UNIQUE,
+  hashed_password TEXT,
+  is_guest      BOOLEAN DEFAULT FALSE,
+  created_at    DATETIME DEFAULT (datetime('now'))
+);
+
+-- Meeting records (instant + scheduled)
+CREATE TABLE meetings (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_code     TEXT    UNIQUE NOT NULL,    -- e.g. "847-392-156"
+  title            TEXT    NOT NULL,
+  description      TEXT,
+  host_id          INTEGER REFERENCES users(id),
+  status           TEXT    DEFAULT 'scheduled', -- scheduled|active|ended
+  scheduled_at     DATETIME,                   -- NULL for instant meetings
+  duration_minutes INTEGER DEFAULT 60,
+  created_at       DATETIME DEFAULT (datetime('now'))
+);
+
+-- Participant join/leave records
+CREATE TABLE participants (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_id   INTEGER NOT NULL REFERENCES meetings(id),
+  user_id      INTEGER REFERENCES users(id),   -- NULL = anonymous guest
+  display_name TEXT    NOT NULL,
+  role         TEXT    DEFAULT 'participant',  -- host|participant
+  joined_at    DATETIME DEFAULT (datetime('now')),
+  left_at      DATETIME                        -- NULL = still in meeting
+);
+```
+
+### Entity Relationships
+```
+users ──┬── hosts ──► meetings ──── participants ◄── users (optional)
+        │                                │
+        └── joins ──────────────────────┘
+                (user_id nullable for guests)
+```
+
+---
+
+## 🚀 Local Setup
 
 ### Prerequisites
-- **Node.js** 18+ and **npm**
-- **Python** 3.10+ and **pip**
+- **Node.js** 18+ and npm
+- **Python** 3.10+ and pip
 
 ---
 
-### 1. Backend Setup
-
+### 1. Clone the Repository
 ```bash
-cd backend
-pip install -r requirements.txt
-python seed.py          # Seed demo data (optional)
-uvicorn app.main:app --reload --port 8000
+git clone https://github.com/aviralgoel26/Zoom-Clone.git
+cd Zoom-Clone
 ```
 
-API: http://localhost:8000 | Swagger: http://localhost:8000/docs
+### 2. Backend Setup
+```bash
+cd backend
 
----
+# Install dependencies
+pip install -r requirements.txt
 
-### 2. Frontend Setup
+# Start the API server (auto-reloads on file changes)
+python -m uvicorn app.main:app --reload --port 8000 --host 127.0.0.1
+```
 
+- REST API: http://localhost:8000
+- Swagger UI: http://localhost:8000/docs
+- SQLite DB file auto-created at `backend/sql_app.db`
+
+### 3. Frontend Setup
 ```bash
 cd frontend
+
+# Install dependencies
 npm install
+
+# Start the dev server
 npm run dev
 ```
 
-App: http://localhost:3000
+- App: http://localhost:3000
+
+### 4. Environment (already configured)
+```bash
+# frontend/.env.local
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
 ---
 
-### 3. Dual-Browser Verification
+### 5. Multi-Browser Verification
 
-1. **Browser A (Host)**: Open `http://localhost:3000` → Click **"New Meeting"** → Enter name → **Join Meeting**
-   - You are automatically the host (the `?host=true` URL param is appended by the New Meeting button)
-2. **Browser B (Guest)**: Open a new incognito window → Paste the meeting URL → Enter `Guest User` → **Join Meeting**
-   - You join as a participant (no `?host=true` in the URL)
-3. **Verify**:
+1. **Browser A (Host)** → `http://localhost:3000` → **New Meeting** → Enter name → **Join Meeting**
+   - Host badge appears; host controls (End Meeting, Mute All) are visible
+2. **Browser B (Participant)** → Open incognito → Paste the meeting URL → Enter `Guest User` → **Join Meeting**
    - Both video tiles appear in the grid
-   - Audio/video toggles work — camera turns off/on without freezing
-   - Participant list shows both users with green/red mic+video indicators
-   - Host sees **"Mute All"** and **"Stop All Video"** buttons in the participant panel
-   - Host sees a **⋮ action menu** (Mute Mic, Stop Video, Remove, Make Host) per participant
-   - **Share Screen** (green button) in the toolbar opens screen picker
-   - **More (...)** menu opens popover with Breakout Rooms, Whiteboards, Settings, Stop Incoming Video
+3. **Verify features**:
+   - Audio/video toggles — camera turns off/on without freezing
+   - **Share Screen** — green button opens system screen picker
+   - **Reactions** — emoji appears in floating overlay for both users
+   - **Chat** — messages sync in real time via WebSocket
+   - **Speaker View** toggle — switches between grid and large+thumbnails layout
+   - **Duration timer** — counts up from `00:00` in the top bar
+   - **Sidebar icons** (ZoomMate, Chat, Hub) → Zoom-styled "Coming Soon" toast appears
 
 ---
 
-## Host Authorization Model
+## 📡 API Endpoints
 
-Host assignment is a two-layer security model:
+### Auth
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/auth/register` | Register new user → returns JWT + user |
+| `POST` | `/api/auth/login` | Sign in → returns JWT + user |
+| `GET` | `/api/auth/me` | Get current user from Bearer token |
 
-### Layer 1 — URL Parameter
-The `?host=true` query param is the **only** mechanism that grants host role. It is appended exclusively by the "New Meeting" dashboard action:
+### Meetings
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/meetings/instant` | Create instant meeting (status=active) |
+| `POST` | `/api/meetings/schedule` | Create scheduled meeting (status=scheduled) |
+| `GET` | `/api/meetings/upcoming?user_id=N` | Upcoming meetings for user |
+| `GET` | `/api/meetings/recent?user_id=N` | Recent/ended meetings for user |
+| `GET` | `/api/meetings/{code}` | Validate meeting code before joining |
+| `POST` | `/api/meetings/{id}/join` | Record participant entry |
+| `POST` | `/api/meetings/{id}/leave/{pid}` | Record participant exit |
+| `POST` | `/api/meetings/{id}/end` | Mark meeting as ended (host) |
 
-```typescript
-// dashboard page.tsx — handleNewMeeting()
-router.push(`/meeting/${meeting.meeting_code}?host=true`);
-```
-
-Anyone joining via a shared link, Meeting ID input, or the meetings list never gets `?host=true` and joins as `participant`.
-
-### Layer 2 — No UI Escalation
-The lobby **role selector** (the host/participant toggle buttons) has been **completely removed**. There is no client-side control that lets a participant self-assign host.
-
-### Role Transfer
-The host can transfer their role to any participant via the Participant List `⋮` → "Make Host". This sends a WebSocket `host-action: make-host` message. The receiving peer's `onBecameHost()` callback fires and updates the role state, making host controls visible. (DB update is deferred for production.)
-
----
-
-## Database Schema
-
-```
-users
-  id (PK), display_name, email (nullable), is_guest, created_at
-
-meetings
-  id (PK), meeting_code (UNIQUE), title, description
-  host_id (FK → users.id, nullable)
-  status (scheduled|active|ended)
-  scheduled_at (nullable), duration_minutes, created_at
-
-participants
-  id (PK), meeting_id (FK → meetings.id)
-  user_id (FK → users.id, NULLABLE — guest support)
-  display_name, role (host|participant)
-  joined_at, left_at (nullable)
-```
+### WebSocket
+| Endpoint | Description |
+|---|---|
+| `WS /ws/meeting/{meeting_id}` | Signaling: offer/answer/ICE relay + host-actions |
 
 ---
 
-## Key Design Assumptions
-
-1. **Mesh Topology** — Every peer connects directly to every other peer. Suitable for ≤4 participants. For larger meetings, an SFU (Selective Forwarding Unit) like mediasoup would be used.
-
-2. **Guest Users** — `Participant.user_id` is nullable. Guests bypass the `users` table entirely; only their `display_name` is stored on the participant record.
-
-3. **Single Region** — No geographic load balancing. All users connect to one FastAPI server.
-
-4. **SQLite** — Chosen for zero-config local development. For production, swap `SQLALCHEMY_DATABASE_URL` to a PostgreSQL connection string; no other code changes needed (SQLAlchemy abstracts the dialect).
-
-5. **No Authentication** — The app uses a "trust-on-entry" model. A real app would add JWT auth via FastAPI's OAuth2PasswordBearer.
-
-6. **STUN Only** — For production, add TURN servers to handle symmetric NAT cases where direct P2P is blocked.
-
----
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 zoom-clone/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI entry + CORS + startup
-│   │   ├── database.py          # SQLAlchemy engine + session
-│   │   ├── models.py            # ORM models (User, Meeting, Participant)
-│   │   ├── schemas.py           # Pydantic v2 DTOs
-│   │   ├── crud.py              # DB access layer
-│   │   ├── websocket_manager.py # Room-based WS connection manager
+│   │   ├── main.py              # FastAPI entry, CORS, startup
+│   │   ├── database.py          # SQLAlchemy engine + session factory
+│   │   ├── models.py            # ORM models: User, Meeting, Participant
+│   │   ├── schemas.py           # Pydantic v2 request/response DTOs
+│   │   ├── crud.py              # DB access layer (all queries here)
+│   │   ├── auth_utils.py        # bcrypt hashing + JWT encode/decode
+│   │   ├── websocket_manager.py # Room-scoped WS connection manager
 │   │   └── routers/
+│   │       ├── auth.py          # POST /api/auth/*
 │   │       ├── meetings.py      # REST /api/meetings/*
-│   │       └── signaling.py     # WS /ws/meeting/{id} + host-action relay
-│   ├── seed.py                  # Demo data seeder
+│   │       └── signaling.py     # WS /ws/meeting/{id}
+│   ├── view_db.py               # SQLite inspection helper
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
-│   │   ├── layout.tsx           # Root layout + metadata
-│   │   ├── globals.css          # Design tokens + global styles
-│   │   ├── page.tsx             # Dashboard (3 cards, Join modal)
-│   │   ├── meeting/[id]/page.tsx # Lobby (no role selector) + Meeting room
-│   │   └── schedule/page.tsx    # Schedule form
+│   │   ├── layout.tsx           # Root layout + ToastProvider
+│   │   ├── globals.css          # Design tokens + global animations
+│   │   ├── page.tsx             # Dashboard: clock, actions, meetings
+│   │   ├── meeting/[id]/page.tsx # Lobby + Live meeting room
+│   │   └── schedule/page.tsx    # Schedule meeting form
 │   ├── components/
-│   │   ├── DashboardHeader.tsx
-│   │   ├── VideoGrid.tsx        # Fixed srcObject re-attach on camera toggle
-│   │   ├── ControlsBar.tsx      # Share Screen + More popover
-│   │   ├── ParticipantList.tsx  # Stop All Video + per-row ⋮ menus
-│   │   └── MeetingHealth.tsx
+│   │   ├── ui/Toast.tsx         # Toast context + useToast() hook
+│   │   ├── AppShell.tsx         # Sidebar + Header layout wrapper
+│   │   ├── DashboardHeader.tsx  # Top bar + Auth modal (Zoom-styled)
+│   │   ├── Sidebar.tsx          # Left nav (Coming-Soon toasts)
+│   │   ├── VideoGrid.tsx        # Grid + Speaker view layouts
+│   │   ├── ControlsBar.tsx      # Meeting bottom toolbar
+│   │   ├── ParticipantList.tsx  # Host controls side panel
+│   │   ├── ChatPanel.tsx        # In-meeting chat drawer
+│   │   └── MeetingHealth.tsx    # ICE connection state badge
 │   ├── hooks/
-│   │   └── useWebRTC.ts         # Full host controls + screen sharing
+│   │   └── useWebRTC.ts         # WebRTC peer management + signaling
 │   ├── lib/
-│   │   └── api.ts
-│   └── .env.local
+│   │   ├── api.ts               # REST API helpers
+│   │   └── auth.ts              # JWT storage + useAuth() hook
+│   └── .env.local               # NEXT_PUBLIC_API_URL
 ├── README.md
 └── INTERVIEW_CHEATSHEET.md
 ```
+
+---
+
+## 🔐 Security Model
+
+### Host Authorization
+Host role is assigned **exclusively** via the `?host=true` URL query parameter, which is only appended by the `handleNewMeeting()` dashboard action. No UI control allows a participant to self-elevate.
+
+```typescript
+// Only this code appends ?host=true
+router.push(`/meeting/${meeting.meeting_code}?host=true`);
+
+// Lobby derives role from URL — immutable
+const role: "host" | "participant" = isHostFromQuery ? "host" : "participant";
+```
+
+### Password Security
+- Passwords hashed with `bcrypt` (cost factor 12) via Python's native `bcrypt` library
+- JWT tokens expire after 7 days; stored in `localStorage`
+- `passlib` intentionally avoided due to Python 3.13 incompatibility with bcrypt 4.x
+
+---
+
+## ⚡ Performance Notes
+
+| Scenario | Behavior |
+|---|---|
+| Backend offline | All API calls return `[]` gracefully; meeting room falls back to local code generation |
+| Invalid meeting code | Lobby shows error screen with "Back to Home" — never enters room |
+| Camera permission denied | Camera off state shown with avatar fallback — meeting continues |
+| WebRTC ICE failure | Connection health badge shows degraded state; audio still attempts via STUN |
+| >4 participants | Grid switches to 3-column layout; for >9 consider SFU (see Scaling below) |
+
+---
+
+## 🚀 Scaling to Production
+
+| Current (Dev) | Production Recommendation |
+|---|---|
+| SQLite | PostgreSQL (swap `SQLALCHEMY_DATABASE_URL`) |
+| P2P Mesh WebRTC | SFU: [LiveKit](https://livekit.io/) or [mediasoup](https://mediasoup.org/) |
+| STUN only | Add TURN servers (coturn) for symmetric NAT |
+| In-process WS manager | Redis pub/sub for multi-instance signaling |
+| `localStorage` JWT | HttpOnly cookie + refresh token rotation |
+| Single region | CDN + edge compute (Cloudflare Workers) |

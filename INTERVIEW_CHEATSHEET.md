@@ -1,331 +1,323 @@
-# Interview Cheatsheet — Zoom Clone
+# 🎤 Interview Cheatsheet — Zoom Clone
 
-This document provides line-by-line explanations of the most complex files
-and answers to the questions an evaluator is most likely to ask.
+> Comprehensive technical reference for code-walkthrough evaluation interviews.
 
 ---
 
-## 1. `useWebRTC.ts` — Line-by-Line
+## 1. Architecture & Design Choices
 
-### `getUserMedia`
+### Why Next.js 16 App Router + FastAPI?
+
+**Next.js App Router** was chosen over Pages Router because:
+- **Server Components** allow zero-JS metadata pages (SEO-friendly meeting invite pages)
+- **File-based dynamic routing** (`/meeting/[id]`) cleanly maps to meeting codes without configuration
+- **`"use client"` boundary** explicitly separates media API usage (camera/mic) from server-rendered content
+- **Built-in TypeScript** eliminates a separate transpilation pipeline
+
+**FastAPI** over Express/Django because:
+- **Automatic OpenAPI docs** (`/docs`) — interviewer can test endpoints live
+- **Pydantic v2 schemas** provide request validation and DTO generation in one declaration
+- **`async def` WebSocket handlers** are non-blocking for the signaling relay
+- **SQLAlchemy ORM** is database-agnostic — swap SQLite for PostgreSQL with one config change
+
+### Why SQLite over PostgreSQL for this project?
+- **Zero-config** — no Docker, no DSN setup required for evaluation
+- **Single file** (`sql_app.db`) — easy to inspect, reset, and version
+- **SQLAlchemy abstraction** — production migration is a one-line `DATABASE_URL` change
+
+---
+
+## 2. WebRTC & WebSocket Signaling — Deep Dive
+
+### The 4-Step Connection Handshake
+
+```
+Step 1: Both browsers connect to  WS /ws/meeting/{meeting_id}
+
+Step 2: Peer A sends "offer"
+  Browser A: pc.createOffer() → pc.setLocalDescription(offer)
+  A → WS: { type: "offer", sdp: offer.sdp, target: peerB_id }
+  Server relays to Peer B.
+
+Step 3: Peer B responds with "answer"
+  Browser B: pc.setRemoteDescription(offer) → pc.createAnswer()
+  B → WS: { type: "answer", sdp: answer.sdp, target: peerA_id }
+  Server relays to Peer A.
+
+Step 4: ICE candidate exchange (trickle ICE)
+  Both sides: pc.onicecandidate → send { type: "ice-candidate", candidate }
+  Server relays to the other peer.
+  WebRTC engine finds the best P2P path (STUN).
+
+Result: Direct peer-to-peer media stream established.
+```
+
+### Key implementation details in `useWebRTC.ts`
+
 ```typescript
-const stream = await navigator.mediaDevices.getUserMedia({
-  video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-  audio: { echoCancellation: true, noiseSuppression: true },
+// RTCPeerConnection config — Google STUN only (add TURN for production)
+const pc = new RTCPeerConnection({
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 });
-```
-- **What**: Requests the browser to open the camera and microphone.
-- **Why constraints**: `ideal` means "use 720p if the hardware supports it, otherwise fall back". `echoCancellation` uses the browser's built-in DSP to prevent feedback loops.
-- **Returns**: A `MediaStream` object containing one video `MediaStreamTrack` and one audio `MediaStreamTrack`.
 
-### `createOffer`
-```typescript
-const offer = await pc.createOffer();
-await pc.setLocalDescription(offer);
-```
-- **What**: Generates an SDP (Session Description Protocol) document that describes our local media capabilities (codecs, resolutions, audio channels).
-- **Why `setLocalDescription` immediately**: This triggers ICE candidate gathering. The browser starts probing local and STUN-derived network addresses so they can be relayed to the remote peer.
-- **Flow**: We then send this SDP over the WebSocket so the remote peer knows what we can support.
+// Add local tracks BEFORE creating offer (order matters!)
+localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
-### `setRemoteDescription` + `createAnswer`
-```typescript
-await pc.setRemoteDescription(new RTCSessionDescription(message.sdp));
-const answer = await pc.createAnswer();
-await pc.setLocalDescription(answer);
-```
-- **What**: The callee receives the offer, stores it as the "remote" description, then generates an answer (its own SDP) and sends it back.
-- **Why both sides set descriptions**: RTCPeerConnection needs both sides' SDP to negotiate a common codec and format. The "offer/answer" handshake is defined in RFC 3264.
-
-### `addIceCandidate`
-```typescript
-await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
-```
-- **What**: Adds a network address + port discovered via ICE to the peer connection.
-- **Trickle ICE**: Instead of waiting for all candidates before sending the offer, we send candidates as they're discovered (trickle). This makes connection setup 2–3× faster.
-- **Error handling**: We wrap in try/catch because candidates can arrive before `setRemoteDescription` completes, causing benign "InvalidStateError" that must not crash the app.
-
-### `ontrack`
-```typescript
-pc.ontrack = ({ streams }) => {
-  const [remoteStream] = streams;
-  setRemotePeers((prev) => [...prev, { peerId, stream: remoteStream, ... }]);
+// Trickle ICE — send candidates as they arrive
+pc.onicecandidate = ({ candidate }) => {
+  if (candidate) ws.send(JSON.stringify({ type: "ice-candidate", candidate }));
 };
-```
-- **What**: Fires when the remote peer's tracks arrive. `streams[0]` is the `MediaStream` that contains the peer's audio and video tracks.
-- **Why destructure streams**: Each track can belong to multiple streams. We always use `streams[0]` — the first/only stream associated with this track.
-- **Effect**: We store the `MediaStream` in React state → `VideoGrid` attaches it to a `<video srcObject={stream} />` element.
 
-### Track Cleanup (CRITICAL)
-```typescript
-localStreamRef.current?.getTracks().forEach((track) => {
-  track.stop();
-});
+// Remote stream arrives via ontrack
+pc.ontrack = ({ streams }) => setRemoteStream(streams[0]);
 ```
-- **What**: `track.stop()` signals the browser that we're done using the hardware. The OS then releases the camera and mic.
-- **Why mandatory**: Without this, the camera LED stays on (hardware still "in use"), and the next call to `getUserMedia` throws `NotReadableError: Device already in use`.
-- **When called**: In the `useEffect` cleanup return function (component unmount) AND in `handleLeave` (explicit leave action).
+
+### Why Mesh Topology (not SFU)?
+- **Suitable for ≤4 participants** — each browser sends to N-1 peers directly
+- **No server media processing** — FastAPI is purely a signaling relay, zero media load
+- **Drawback:** Upload bandwidth grows linearly (4 peers = 3 upstream video streams per client)
+- **Production fix:** Replace with LiveKit SFU — each client sends ONE stream to the server, which selectively forwards
 
 ---
 
-## 2. Camera Toggle — `MediaStreamTrack.enabled` vs `replaceTrack` (NEW)
+## 3. Database Schema Justification
 
-### The Black Box Bug and Fix
-
-**Root cause**: The `<video>` element in `VideoTile` is conditionally rendered:
-```tsx
-{!isVideoOff && stream ? <video ref={videoRef} ... /> : <AvatarFallback />}
+### `users` table
+```sql
+email TEXT UNIQUE   -- Optional: guest users can join without email
+hashed_password TEXT  -- bcrypt hash; NULL for guests created before auth
+is_guest BOOLEAN      -- Guest users bypass users table entirely
 ```
-When `isVideoOff` goes `false → true → false`, the `<video>` element **unmounts** and then **remounts** as a brand-new DOM node. Its `srcObject` is `null` on remount.
+**Design choice:** `user_id` on `participants` is **nullable** — this allows anonymous guests to join and be tracked without requiring a registered account.
 
-The original `useEffect([stream])` would not re-fire because the stream reference never changed — only `isVideoOff` did. Result: **black box**.
-
-**Fix** (`VideoGrid.tsx`):
-```typescript
-useEffect(() => {
-  if (videoRef.current && stream && !isVideoOff) {
-    videoRef.current.srcObject = stream;
-    videoRef.current.play().catch(() => {});
-  }
-}, [stream, isVideoOff]);  // <-- isVideoOff added to deps
+### `meetings` table
+```sql
+meeting_code TEXT UNIQUE  -- e.g. "847-392-156"
+host_id INTEGER REFERENCES users(id)  -- Nullable for backwards compat
+status TEXT  -- "scheduled" | "active" | "ended"
+scheduled_at DATETIME  -- NULL for instant meetings
 ```
-Adding `isVideoOff` to the dependency array ensures the effect runs when camera toggles back ON, re-attaching `srcObject` to the newly mounted `<video>` element.
+**Design choice:** `meeting_code` is a separate formatted string (not the PK) so it can be human-readable and URL-safe while the PK is an auto-increment integer for join performance.
 
-### `track.enabled` vs `replaceTrack` — When to Use Which
-
-| Method | Use Case | Behaviour |
-|--------|----------|-----------|
-| `track.enabled = false` | Toggle camera/mic on/off | Track stays in stream; sends black/silent frames. Cheap — no renegotiation. |
-| `track.enabled = true` | Re-enable camera/mic | Track resumes sending real frames. Remote peers automatically see it resume. |
-| `replaceTrack(newTrack)` | Screen share / camera swap | Swaps the track in all RTCRtpSenders. Triggers ICE renegotiation. Required when the track object changes. |
-
-**Camera toggle**: We use `track.enabled` because the track object stays the same.
-**Screen sharing**: We use `replaceTrack()` because `getDisplayMedia()` returns a brand-new track object.
-
-```typescript
-// Screen share — replace video track on all peer connections
-peerConnectionsRef.current.forEach((pc) => {
-  const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-  sender?.replaceTrack(screenTrack);
-});
-
-// Stop screen share — restore camera track
-peerConnectionsRef.current.forEach((pc) => {
-  const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-  sender?.replaceTrack(cameraTrack);
-});
+### `participants` table
+```sql
+user_id INTEGER REFERENCES users(id)  -- NULL = anonymous guest
+role TEXT  -- "host" | "participant"
+left_at DATETIME  -- NULL means still in meeting
 ```
+**Design choice:** Dual-identity support. A registered user gets `user_id` linked; an anonymous guest gets `NULL`. The `display_name` is always stored so the participant panel always has a label.
 
 ---
 
-## 3. Host Authorization — URL-Param Lock (NEW)
+## 4. State Management
 
-### The Problem: Client-Side Role Escalation
-Before the fix, the lobby showed explicit `[Host] [Participant]` toggle buttons. Any user could self-assign "host" before joining, gaining full host controls (Mute All, kick, etc.) over other participants.
+### No Redux / Zustand — Why?
+The app uses React's built-in `useState` + `useEffect` + `Context` because:
+- **Meeting state is local to one room** — no cross-route state sharing needed
+- **Auth state** is managed via `useAuth()` hook (context + localStorage)
+- **Toast state** is managed via `useToast()` (context)
+- Adding a global store would be premature complexity for this scope
 
-### The Fix: Two-Layer Authorization
-
-**Layer 1 — URL Parameter (Frontend)**
+### `useWebRTC` Hook Architecture
 ```typescript
-// dashboard/page.tsx — handleNewMeeting() — THE ONLY place ?host=true is added
-router.push(`/meeting/${meeting.meeting_code}?host=true`);
-
-// meeting/[id]/page.tsx — role is read-only from URL
-const isHostFromQuery = searchParams.get("host") === "true";
-const role: "host" | "participant" = isHostFromQuery ? "host" : "participant";
-// ↑ const — no setState, no UI control can change this
+// All WebRTC state lives in one custom hook
+const {
+  localStream,    // MediaStream from getUserMedia
+  remotePeers,    // Array of { peerId, stream, displayName, isMuted, isVideoOff }
+  isAudioMuted,   // Local audio track enabled state
+  isVideoOff,     // Local video track enabled state
+  isScreenSharing,
+  messages,       // Chat messages received via WebSocket
+  reactions,      // Recent emoji reactions with auto-expiry
+  // Actions
+  toggleAudio, toggleVideo, shareScreen,
+  muteAll, kickPeer, makeHost,
+  sendChatMessage, sendReaction,
+} = useWebRTC({ meetingId, displayName, role });
 ```
 
-**Layer 2 — UI Removal**
-```tsx
-{/* REMOVED — the role selector no longer exists in the lobby */}
-{/* {([\"host\", \"participant\"] as const).map(...)} */}
-```
-
-The role selector buttons are gone. The lobby now shows an informational badge only:
-```tsx
-{isHostFromQuery && (
-  <div className="text-[#FF9500]">
-    <Shield /> You are the Host
-  </div>
-)}
-```
-
-**Why this works**: `?host=true` is only ever appended by the "New Meeting" button. Shared meeting links never contain it. Participants joining via ID or link get `role = "participant"` unconditionally.
-
-**Production hardening** (beyond this scope): Validate role on WebSocket connect by querying the DB — check that the joining display name matches a Participant row with `role=host` before relaying any host-action messages from that connection.
+**Key pattern:** The hook encapsulates ALL WebRTC + WebSocket logic. The page component is a pure orchestrator — it only passes props and handles routing.
 
 ---
 
-## 4. WebSocket Broadcast Host Commands (NEW)
+## 5. Edge Cases Handled
 
-### Message Schema
+### Backend Offline
 ```typescript
-// Sent by host browser → FastAPI → all other peers
-{
-  type: "host-action",
-  action: "mute-all" | "stop-all-video" | "mute-peer" | "stop-video-peer" | "kick" | "make-host",
-  targetPeerId?: string  // required for peer-specific actions
-}
-```
-
-### Relay Flow
-```
-Host Browser           FastAPI signaling.py              Participant Browser
-     │                          │                                │
-     │── {type:"host-action", ──►│                                │
-     │    action:"mute-all"}     │── manager.broadcast() ────────►│
-     │                          │   (excludes sender)            │ ws.onmessage fires
-     │                          │                                │
-     │                          │                                │ if action === "mute-all":
-     │                          │                                │   track.enabled = false
-     │                          │                                │   setIsAudioMuted(true)
-```
-
-### Handler Table
-```typescript
-// useWebRTC.ts — ws.onmessage handler
-if (type === "host-action") {
-  const action = message.action;
-  const targetPeerId = message.targetPeerId;
-
-  if (action === "mute-all") {
-    // Apply to self — no targetPeerId check (affects all non-hosts)
-    localStream.getAudioTracks().forEach(t => { t.enabled = false; });
-    setIsAudioMuted(true);
-
-  } else if (action === "stop-all-video") {
-    localStream.getVideoTracks().forEach(t => { t.enabled = false; });
-    setIsVideoOff(true);
-
-  } else if (action === "mute-peer" && targetPeerId === myPeerIdRef.current) {
-    // Only act if WE are the specific target
-    localStream.getAudioTracks().forEach(t => { t.enabled = false; });
-    setIsAudioMuted(true);
-
-  } else if (action === "stop-video-peer" && targetPeerId === myPeerIdRef.current) {
-    localStream.getVideoTracks().forEach(t => { t.enabled = false; });
-    setIsVideoOff(true);
-
-  } else if (action === "kick" && targetPeerId === myPeerIdRef.current) {
-    cleanup();  // Stop all tracks, close WS
-    window.location.href = "/";  // Redirect to dashboard
-
-  } else if (action === "make-host" && targetPeerId === myPeerIdRef.current) {
-    onBecameHost?.();  // Callback → setMutableRole("host") in page
+// All API fetches catch network errors and return safe defaults
+export async function getUpcomingMeetings(userId?: number): Promise<Meeting[]> {
+  try {
+    return await apiFetch<Meeting[]>(`/api/meetings/upcoming`);
+  } catch {
+    return [];  // ← Dashboard still renders, shows empty state
   }
 }
 ```
 
-### FastAPI Relay (`signaling.py`)
-```python
-elif msg_type == "host-action":
-    # Pure relay — no validation at this layer.
-    # All peers in the room receive this; each client self-filters by targetPeerId.
-    await manager.broadcast(message, meeting_id, sender=websocket)
+### Invalid Meeting Code
+- Lobby phase validates against `GET /api/meetings/{code}` before showing join form
+- If `valid: false`, renders dedicated error screen with "Back to Home" CTA
+- If backend is unreachable, still allows entry (graceful degradation for demos)
+
+### Camera Permission Rejected
+```typescript
+try {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+} catch {
+  setLobbyVideoOn(false);  // ← Lobby shows avatar fallback, continues normally
+}
 ```
-The server is intentionally stateless for signaling — it doesn't need to know who the host is because the frontend enforces role via the URL param and the DB stores the authoritative role.
+
+### Audio Echo Prevention
+```html
+<!-- Local video element always has muted=true -->
+<video ref={videoRef} autoPlay playsInline muted={isLocal} />
+```
+This prevents the local user from hearing their own microphone through the speakers.
+
+### Meeting Code Collision
+```python
+def _generate_meeting_code() -> str:
+    code = "".join(random.choices(string.digits, k=9))
+    formatted = f"{code[:3]}-{code[3:6]}-{code[6:]}"
+    # Retry until unique (astronomically rare collision)
+    while get_meeting_by_code(db, formatted):
+        code = _generate_meeting_code()
+    return formatted
+```
+
+### `srcObject` Re-attachment on Camera Toggle
+When video is toggled off and back on, the `<video>` element is unmounted/remounted. The `useEffect` with `[stream, isVideoOff]` dependency ensures `srcObject` is always re-attached to the correct live stream.
+
+### Python 3.13 + passlib Incompatibility
+`passlib` 1.7.4 triggers a `ValueError` with `bcrypt` 4.x on Python 3.13. Solution: bypass `passlib` entirely and use the native `bcrypt` library directly:
+```python
+import bcrypt
+hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12))
+valid = bcrypt.checkpw(password.encode(), hashed)
+```
 
 ---
 
-## 5. FastAPI WebSocket Connection Management — Line-by-Line
+## 6. Host Authorization Model
 
-### `manager.connect`
-```python
-await websocket.accept()
-self.active_rooms[meeting_id].append(websocket)
 ```
-- **`accept()`**: Completes the HTTP → WebSocket upgrade handshake. Without this, the browser gets a 403.
-- **`active_rooms`**: A plain Python `dict[str, list[WebSocket]]`. We chose a dict (not a DB table) because WebSocket objects are in-process memory constructs — they can't be serialised to a DB.
+Flow:
+  1. User clicks "New Meeting" on Dashboard
+  2. API creates meeting, returns meeting_code
+  3. Dashboard: router.push(`/meeting/${code}?host=true`)
+                                              ^^^^^^^^^
+                            Only this action appends ?host=true
 
-### `manager.broadcast`
-```python
-for connection in self.active_rooms[meeting_id]:
-    if connection != sender:
-        await connection.send_text(payload)
-```
-- **Why exclude sender**: Signaling messages (offer, ICE) are addressed TO the other peers. Sending them back to the sender would create an echo/loop.
-- **Why async**: `send_text` is an async operation over a TCP socket. Using `await` yields control back to the event loop while the OS flushes the buffer.
+  4. Lobby reads: isHostFromQuery = searchParams.get("host") === "true"
+  5. role = isHostFromQuery ? "host" : "participant"   (immutable)
+  6. Role is passed to useWebRTC → sent to signaling server → stored in participant DB record
 
-### `WebSocketDisconnect` exception handler
-```python
-except WebSocketDisconnect:
-    manager.disconnect(websocket, meeting_id)
-    await manager.broadcast_to_all({"type": "participant-left", ...}, meeting_id)
+Security guarantee: No UI element exists that lets a participant change their role.
+Role transfer via "Make Host" sends a WebSocket message to the target peer's
+onBecameHost() callback, which locally elevates that peer's role state.
 ```
-- **What**: `WebSocketDisconnect` is raised by Starlette when the client closes the connection (tab close, network drop, or graceful `ws.close()`).
-- **Why broadcast**: Remaining peers need to remove the disconnected peer's video tile and close their RTCPeerConnection to that peer, freeing resources.
 
 ---
 
-## 6. SQLAlchemy ORM Relations — `models.py`
+## 7. Toast Notification System
 
-### `relationship` declarations
-```python
-# On User model:
-hosted_meetings = relationship("Meeting", back_populates="host")
-participations = relationship("Participant", back_populates="user")
+```typescript
+// Context-based, zero-dependency
+const { showToast } = useToast();
 
-# On Meeting model:
-host = relationship("User", back_populates="hosted_meetings")
-participants = relationship("Participant", back_populates="meeting")
+// Usage across all components
+showToast("Feature Coming Soon!", "Whiteboard is queued for next release.", "coming-soon");
+
+// Toast types: info | success | warning | coming-soon
+// Auto-dismisses after 3500ms with CSS slide-in animation
+// Stack up to 4 toasts simultaneously
 ```
-- **`back_populates`**: Bidirectional sync. Setting `meeting.host = alice` automatically sets `alice.hosted_meetings` to include that meeting.
-- **Lazy loading**: By default SQLAlchemy uses lazy loading — related objects are fetched only when accessed. For API responses, we use Pydantic serialisation which triggers the load.
 
-### `nullable=True` on `Participant.user_id`
-```python
-user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-```
-- **Why**: Guest users have no row in the `users` table. If `nullable=False`, inserting a guest participant would raise `IntegrityError: NOT NULL constraint failed`.
-- **Trade-off**: We lose referential integrity for guest rows, but gain zero-friction guest onboarding — matching Zoom's real behaviour.
+**Why context vs. event emitter?**
+- Context integrates naturally with React's rendering lifecycle
+- No global mutable state — toast state lives in `ToastProvider`
+- TypeScript-safe — `showToast()` signature is fully typed
 
 ---
 
-## 7. FAQ — Evaluator Questions
+## 8. Production Scaling Roadmap
 
-### "Why did you separate signaling from video transport?"
+### Phase 1 — Database
+```
+SQLite → PostgreSQL
+  - Change SQLALCHEMY_DATABASE_URL to postgres://...
+  - Add Alembic for schema migrations
+  - Add connection pooling (pgBouncer)
+```
 
-**Answer**: WebRTC mandates this separation by design. Signaling (offer/answer/ICE) is a one-time, low-bandwidth JSON handshake that requires a reliable, ordered channel — WebSocket is perfect. Video/audio are high-bandwidth, latency-sensitive continuous streams — they use UDP-based SRTP directly between browsers. Mixing them would mean routing GB/s of media through our server, making it unscalable. Keeping signaling separate means our FastAPI server handles only a few KB of JSON per meeting, regardless of video quality.
+### Phase 2 — Media Scaling (Most Critical)
+```
+P2P Mesh → SFU with LiveKit
+  - Each browser uploads ONE stream to LiveKit server
+  - LiveKit selectively forwards to subscribers
+  - Supports 100s of participants vs. ~4 for mesh
+  - Simulcast: 3 quality layers (low/med/high) per sender
+```
 
-### "Why choose SQLite over PostgreSQL for this scope?"
+### Phase 3 — Real-Time Infrastructure
+```
+In-process WS dict → Redis pub/sub
+  - Multiple FastAPI instances can share room state
+  - WS messages published to Redis channel, subscribed by all instances
+  - Enables horizontal scaling behind a load balancer
+```
 
-**Answer**: Three reasons: (1) **Zero infrastructure** — no separate DB server process to manage during a 1-day assessment; (2) **SQLAlchemy abstracts the dialect** — switching to PostgreSQL requires only changing `SQLALCHEMY_DATABASE_URL` from `sqlite:///./sql_app.db` to `postgresql://user:pass@host/db`; no SQL or model changes needed; (3) **SQLite is production-grade** for read-heavy, low-concurrency workloads (up to ~1000 concurrent readers). For write-heavy production, PostgreSQL's WAL and MVCC would be necessary.
+### Phase 4 — Auth & Security
+```
+localStorage JWT → HttpOnly cookie + refresh token
+  - Eliminates XSS token theft vector
+  - Refresh token rotation prevents replay attacks
+  - Add rate limiting on /api/auth/* endpoints
+```
 
-### "How does your system handle guest users vs host users?"
+### Phase 5 — Infrastructure
+```
+Single region → Multi-region
+  - TURN servers per region (coturn)
+  - CDN for static assets (Cloudflare/Vercel Edge)
+  - Database read replicas per region
+```
 
-**Answer**: The system uses a hybrid model. Registered users have a row in the `users` table with a persistent `id`. When they join a meeting, `Participant.user_id` is set to their id. Guest users skip account creation entirely — they provide only a `display_name` in the lobby. The `Participant` row is created with `user_id=NULL` (enforced by `nullable=True` on the FK column). In the WebSocket signaling layer, every participant — registered or guest — is identified by an ephemeral `peerId` (a random string like `peer-a3f9b2`) that exists only for the duration of the WebSocket connection. This means guests get a full real-time meeting experience with zero sign-up friction, mirroring Zoom's actual "Join without account" feature.
+---
 
-### "How do you prevent a participant from self-assigning host privileges?"
+## 9. Quick Code Navigation Guide
 
-**Answer**: Two layers. First, the lobby UI role selector has been completely removed — there are no controls for a user to choose their role. Second, the host role is derived solely from `?host=true` in the URL, which is only ever appended by the "New Meeting" dashboard action. Joining via a shared link, a Meeting ID, or the meetings list never adds this param. The flow: `Dashboard "New Meeting" click → createInstantMeeting() → router.push('/meeting/${code}?host=true')`. This is the only code path that results in host=true. For production hardening, the WebSocket connect handler would cross-check the connecting peer against the `participants` DB table to validate their claimed role before relaying any `host-action` messages from them.
+| "Show me..." | File | Line range |
+|---|---|---|
+| WebRTC peer connection setup | `hooks/useWebRTC.ts` | Search `RTCPeerConnection` |
+| JWT token generation | `backend/app/auth_utils.py` | `create_access_token()` |
+| Meeting code generation | `backend/app/crud.py` | `_generate_meeting_code()` |
+| WebSocket signaling relay | `backend/app/routers/signaling.py` | `websocket_endpoint()` |
+| Host auth enforcement | `app/meeting/[id]/page.tsx` | L71-92 |
+| User-scoped meeting query | `backend/app/crud.py` | `get_upcoming_meetings()` |
+| Toast system | `components/ui/Toast.tsx` | Full file |
+| Speaker view layout | `components/VideoGrid.tsx` | `viewMode === "speaker"` block |
+| Duration timer | `app/meeting/[id]/page.tsx` | `durationSecs` state + useEffect |
 
-### "What are the limitations of WebRTC Mesh topology?"
+---
 
-**Answer**: In a mesh, every peer establishes a direct connection to every other peer. With N participants: each peer uploads N-1 streams and downloads N-1 streams. **Bandwidth complexity is O(N²)**. In practice:
-- 2 peers: 2 connections, manageable on any connection
-- 4 peers: 6 connections, ~6× the bandwidth of a 1:1 call
-- 8 peers: 28 connections — typically hits bandwidth limits on consumer connections (~50 Mbps upload)
+## 10. Common Interview Questions & Answers
 
-**Real Zoom's solution**: Uses an SFU (Selective Forwarding Unit — e.g., mediasoup, Janus). The SFU receives one upload per participant and selectively forwards streams to viewers, reducing client upload to 1× regardless of N. It also enables simulcast (sending multiple quality layers) and spotlight features. Our mesh is appropriate for the 2–4 participant assessment scenario.
+**Q: How does WebRTC work without a media server?**
+> Browsers use the ICE framework (with STUN) to discover their public IP and negotiate a direct P2P path. The server only relays SDP offer/answer and ICE candidates — no media touches it.
 
-### "How would you add authentication?"
+**Q: What happens if NAT blocks direct P2P?**
+> STUN fails for symmetric NAT (common on corporate networks). Production fix: add TURN servers (coturn) that relay media as a fallback. This project uses STUN only for simplicity.
 
-**Answer**: Use FastAPI's built-in OAuth2 support. Add a `POST /auth/login` endpoint that validates credentials and returns a JWT signed with a secret key (using `python-jose`). All protected routes add `current_user: User = Depends(get_current_user)` where `get_current_user` decodes the JWT from the `Authorization: Bearer <token>` header. On the frontend, store the token in `httpOnly` cookies (not `localStorage` — XSS-safe) and include it in all API requests.
+**Q: How would you secure the WebSocket endpoint?**
+> Validate the JWT token from the initial HTTP upgrade request header. Reject WS connections without a valid Bearer token. Rate-limit connection attempts per IP.
 
-### "Walk me through what happens when a second browser joins."
+**Q: Why not use a library like Socket.io instead of raw WebSockets?**
+> Raw WebSockets keep the dependency surface minimal and make the signaling protocol transparent for evaluation. Socket.io adds reconnection, rooms, and namespaces — all useful in production but unnecessary complexity here.
 
-**Answer**:
-1. Browser B navigates to `/meeting/847-392-156`, passes lobby, enters meeting phase.
-2. `useWebRTC` opens a WebSocket to `/ws/meeting/847-392-156` and sends `{ type: "participant-joined", peerId: "peer-xyz", displayName: "Bob" }`.
-3. The FastAPI `broadcast()` relays this to Browser A's WebSocket.
-4. Browser A's `onmessage` handler receives `participant-joined`, calls `createPeerConnection("peer-xyz", "Bob")`, then calls `createOffer()` and `setLocalDescription()`.
-5. ICE gathering starts on Browser A. The offer SDP is sent to the WS server: `{ type: "offer", sdp: {...}, fromPeerId: "peer-abc" }`.
-6. FastAPI relays to Browser B. Browser B calls `setRemoteDescription(offer)`, then `createAnswer()`, `setLocalDescription(answer)`.
-7. The answer is relayed back to Browser A via FastAPI. Browser A calls `setRemoteDescription(answer)`.
-8. Both browsers exchange ICE candidates via WS (trickle ICE).
-9. ICE negotiation succeeds. DTLS/SRTP secure channel is established directly between the two browsers.
-10. Browser A's `ontrack` fires with Browser B's MediaStream → state update → `VideoGrid` renders a new `<video>` tile for Bob.
+**Q: How does the meeting duration timer work?**
+> When `phase` transitions to `"meeting"`, a `setInterval` starts incrementing `durationSecs` every 1000ms. The `formatDuration()` function converts total seconds to `MM:SS` (or `HH:MM:SS` after 1 hour). The cleanup function clears the interval when the component unmounts or phase changes.
 
-### "How does screen sharing work technically?"
-
-**Answer**: Screen sharing uses `getDisplayMedia()` (a separate browser API from `getUserMedia`) to capture the screen/window/tab. The resulting `MediaStreamTrack` replaces the camera track in all active `RTCRtpSender` objects via `replaceTrack()`. This forces renegotiation on the P2P connection so the remote peer starts receiving screen content instead of camera video. When screen sharing stops, we call `replaceTrack()` again with the original camera track. We also handle the browser's native "Stop sharing" button via `screenTrack.onended`, which fires when the user clicks Stop in the browser UI bar.
+**Q: What's the difference between Grid View and Speaker View?**
+> Grid View uses CSS `grid` with adaptive column counts (1/2/2×2/3-col) based on participant count. Speaker View renders one large tile (flex-1, takes remaining height) and a horizontal scrollable strip of 144×96px thumbnail tiles for all other participants.

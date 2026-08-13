@@ -50,6 +50,7 @@ import {
   Wrench,
   ChevronUp,
 } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -101,6 +102,7 @@ export default function ControlsBar({
   const [showReactMenu, setShowReactMenu] = useState(false);
   const [showHostMenu, setShowHostMenu] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const { showToast } = useToast();
 
   const moreMenuRef   = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -325,7 +327,7 @@ export default function ControlsBar({
                   description="Mute all participants"
                   onClick={() => {
                     setShowHostMenu(false);
-                    alert("Mute All — coming soon!");
+                    showToast("Feature Coming Soon!", "Mute All is queued for the next release.", "coming-soon");
                   }}
                 />
                 <MoreMenuItem
@@ -335,7 +337,7 @@ export default function ControlsBar({
                   description="Prevent new participants"
                   onClick={() => {
                     setShowHostMenu(false);
-                    alert("Lock Meeting — coming soon!");
+                    showToast("Feature Coming Soon!", "Lock Meeting is queued for the next release.", "coming-soon");
                   }}
                 />
               </div>
@@ -389,7 +391,7 @@ export default function ControlsBar({
                 description="Split into smaller groups"
                 onClick={() => {
                   setShowMoreMenu(false);
-                  alert("Breakout Rooms — coming soon!");
+                  showToast("Feature Coming Soon!", "Breakout Rooms are queued for the next release.", "coming-soon");
                 }}
               />
 
@@ -406,7 +408,7 @@ export default function ControlsBar({
                 description="Collaborate on a shared canvas"
                 onClick={() => {
                   setShowMoreMenu(false);
-                  alert("Whiteboards — coming soon!");
+                  showToast("Feature Coming Soon!", "Whiteboards are queued for the next release.", "coming-soon");
                 }}
               />
 
@@ -417,7 +419,7 @@ export default function ControlsBar({
                 description="Audio, video & notifications"
                 onClick={() => {
                   setShowMoreMenu(false);
-                  alert("Settings — coming soon!");
+                  showToast("Feature Coming Soon!", "Settings panel is queued for the next release.", "coming-soon");
                 }}
               />
 

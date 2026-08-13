@@ -240,3 +240,12 @@ video { display: block; max-width: 100%; }
   75%, 100% { transform: scale(2); opacity: 0; }
 }
 .animate-ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+/* ============================================================
+   TOAST SLIDE-IN (bottom-right notification)
+   ============================================================ */
+@keyframes toastSlideIn {
+  from { transform: translateX(110%) scale(0.95); opacity: 0; }
+  to   { transform: translateX(0)   scale(1);    opacity: 1; }
+}
+

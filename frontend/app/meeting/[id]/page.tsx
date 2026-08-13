@@ -34,9 +34,11 @@ import {
   AlertCircle,
   Loader2,
   Shield,
+  LayoutGrid,
+  User,
 } from "lucide-react";
 import { useWebRTC } from "@/hooks/useWebRTC";
-import VideoGrid from "@/components/VideoGrid";
+import VideoGrid, { ViewMode } from "@/components/VideoGrid";
 import ControlsBar from "@/components/ControlsBar";
 import ParticipantList from "@/components/ParticipantList";
 import ChatPanel from "@/components/ChatPanel";
@@ -103,13 +105,20 @@ export default function MeetingPage() {
   const [showChat, setShowChat] = useState(false);
   const [peerCount, setPeerCount] = useState(0);
   const [linkCopied, setLinkCopied] = useState(false);
-  /** Low-bandwidth mode — hide all remote video feeds locally */
   const [stopIncomingVideo, setStopIncomingVideo] = useState(false);
-  /**
-   * mutableRole tracks host status in case "Make Host" is received mid-meeting.
-   * Starts as the URL-derived role; can be elevated by a host-action: make-host WS event.
-   */
   const [mutableRole, setMutableRole] = useState<"host" | "participant">(role);
+  /** View mode — grid (default) or speaker (one large + thumbnails) */
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  /** Duration in seconds since joining the meeting */
+  const [durationSecs, setDurationSecs] = useState(0);
+
+  // Duration count-up timer — starts when phase transitions to "meeting"
+  useEffect(() => {
+    if (phase !== "meeting") return;
+    setDurationSecs(0);
+    const id = setInterval(() => setDurationSecs((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [phase]);
 
   // ---------------------------------------------------------------------------
   // Step 1: Validate meeting code on mount & update page title to suppress Chrome note popup
@@ -507,7 +516,7 @@ export default function MeetingPage() {
     <div className="h-screen bg-[#131314] flex flex-col overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2 bg-[#1C1C1E] border-b border-[#2C2C2E] z-20">
-        {/* Meeting info */}
+        {/* Left: meeting info */}
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-[#34C759] animate-pulse" />
           <div>
@@ -518,11 +527,30 @@ export default function MeetingPage() {
           </div>
         </div>
 
-        {/* Connection health badge */}
-        <MeetingHealth connectionState={connectionState} />
+        {/* Center: duration timer */}
+        <div className="flex items-center gap-3">
+          <MeetingHealth connectionState={connectionState} />
+          <span className="text-[#8E8E93] text-sm font-mono tabular-nums">
+            {formatDuration(durationSecs)}
+          </span>
+        </div>
 
-        {/* Time */}
-        <LiveClock />
+        {/* Right: view mode toggle + clock */}
+        <div className="flex items-center gap-2">
+          <button
+            id="view-mode-toggle"
+            onClick={() => setViewMode((v) => v === "grid" ? "speaker" : "grid")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2C2C2E] hover:bg-[#3A3A3C] text-[#EBEBF5] text-xs font-medium transition-colors cursor-pointer"
+            title={viewMode === "grid" ? "Switch to Speaker View" : "Switch to Grid View"}
+          >
+            {viewMode === "grid" ? (
+              <><User className="w-3.5 h-3.5" /> Speaker View</>
+            ) : (
+              <><LayoutGrid className="w-3.5 h-3.5" /> Grid View</>
+            )}
+          </button>
+          <LiveClock />
+        </div>
       </div>
 
       {/* Video area + optional side panel */}
@@ -543,6 +571,7 @@ export default function MeetingPage() {
               stopIncomingVideo={stopIncomingVideo}
               reactions={reactions}
               localPeerId={myPeerId}
+              viewMode={viewMode}
             />
           )}
         </div>
@@ -612,6 +641,17 @@ export default function MeetingPage() {
 }
 
 // ---------------------------------------------------------------------------
+// formatDuration — converts total seconds → "HH:MM:SS" or "MM:SS"
+// ---------------------------------------------------------------------------
+function formatDuration(totalSecs: number): string {
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+// ---------------------------------------------------------------------------
 // LiveClock — updates every second
 // ---------------------------------------------------------------------------
 function LiveClock() {
@@ -636,3 +676,4 @@ function LiveClock() {
 
   return <span className="text-[#8E8E93] text-sm font-mono">{time}</span>;
 }
+
